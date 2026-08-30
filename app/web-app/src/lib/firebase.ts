@@ -17,18 +17,24 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
-// Initialize Firebase
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-const auth = getAuth(app);
+// Initialize Firebase only if config is present to avoid build-time crashes
+const app = getApps().length > 0
+  ? getApp()
+  : (firebaseConfig.apiKey ? initializeApp(firebaseConfig) : null);
+
+// Initialize services with safety checks
+export const auth = app ? getAuth(app) : null as any;
 
 // Use existing Firestore instance if available, otherwise initialize with persistent cache
-const db = getApps().length > 0
-  ? getFirestore(app)
-  : initializeFirestore(app, {
-      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
-    });
+export const db = app
+  ? (getApps().length > 0
+      ? getFirestore(app)
+      : initializeFirestore(app, {
+          localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+        }))
+  : null as any;
 
-const storage = getStorage(app);
+export const storage = app ? getStorage(app) : null as any;
 
 const googleProvider = new GoogleAuthProvider();
 googleProvider.addScope('https://www.googleapis.com/auth/user.phonenumbers.read');
@@ -42,4 +48,4 @@ const appleProvider = new OAuthProvider('apple.com');
 appleProvider.addScope('email');
 appleProvider.addScope('name');
 
-export { auth, db, storage, googleProvider, facebookProvider, appleProvider };
+export { googleProvider, facebookProvider, appleProvider };
