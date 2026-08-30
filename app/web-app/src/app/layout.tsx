@@ -1,0 +1,89 @@
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
+import { AuthProvider } from "@/context/auth-context";
+import { ToastProvider } from "@/context/toast-context";
+import { SearchProvider } from "@/context/search-context";
+import { Sidebar } from "@/components/layout/sidebar";
+import { Header } from "@/components/layout/header";
+
+import { LoginGate } from "@/components/auth/LoginGate";
+
+const inter = Inter({ subsets: ["latin"] });
+
+export const metadata: Metadata = {
+  title: "XCloud - Secure Cloud Storage",
+  description: "Next-generation E2E encrypted cloud storage for your digital life. 1TB free secure vault with global multi-region redundancy.",
+  keywords: ["cloud storage", "secure vault", "encryption", "XCloud", "file sharing"],
+  authors: [{ name: "XCloud Team" }],
+  openGraph: {
+    title: "XCloud - Secure Cloud Storage",
+    description: "The safest place for your digital life. 1TB encrypted storage.",
+    url: "https://xcloud.app",
+    siteName: "XCloud",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "XCloud Secure Storage",
+      },
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "XCloud - Secure Cloud Storage",
+    description: "Zero-knowledge encrypted cloud storage.",
+    images: ["/og-image.png"],
+  },
+  icons: {
+    icon: "/favicon.ico",
+  },
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                  document.documentElement.classList.add('dark');
+                } else {
+                  document.documentElement.classList.remove('dark');
+                }
+              } catch (_) {}
+            `,
+          }}
+        />
+      </head>
+      <body className={`${inter.className} antialiased`}>
+        <AuthProvider>
+          <ToastProvider>
+            <SearchProvider>
+              <LoginGate>
+                <div className="flex min-h-screen overflow-hidden">
+                  <Sidebar />
+                  <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                    <Header />
+                    <main className="flex-1 overflow-y-auto">
+                      {children}
+                    </main>
+                  </div>
+                </div>
+              </LoginGate>
+            </SearchProvider>
+          </ToastProvider>
+        </AuthProvider>
+      </body>
+    </html>
+  );
+}

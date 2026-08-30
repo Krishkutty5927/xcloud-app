@@ -1,0 +1,27 @@
+package com.cloud.x.model
+
+import dev.gitlive.firebase.firestore.Timestamp
+import kotlinx.serialization.Serializable
+
+@Serializable
+data class FileEntry(
+    val fileId: String = "",
+    val fileName: String = "",
+    val fileType: String = "",
+    val fileSize: Long = 0,
+    val downloadUrl: String = "",
+    val uploadTimestamp: Timestamp = Timestamp.now(),
+    val ownerId: String = "",
+    val storagePath: String = "",
+    val parentId: String = "root",
+    val isDeleted: Boolean = false,
+    val deletedTimestamp: Timestamp? = null,
+    val isOffline: Boolean = false,
+    val isStarred: Boolean = false,
+    val isShared: Boolean = false,
+    val shareId: String? = null,
+    val passcode: String? = null,
+    val expiryTimestamp: Timestamp? = null,
+    val lastOpenedTimestamp: Timestamp? = null,
+    val sharedWithEmails: List<String> = emptyList()
+)

@@ -1,0 +1,15 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <!-- Blue Cloud Background -->
+    <path
+        android:fillColor="#005AC1"
+        android:pathData="M163.5,135H41.5C28.5,135 18,124.5 18,111.5c0,-11.4 8.1,-20.9 18.9,-23c1.9,-12.4 12.8,-21.8 25.9,-21.8c8.4,0 15.7,3.9 20.4,10c5.4,-6.2 13.3,-10 22,-10c13.7,0 25.1,9.4 28.5,22.2c1.4,-0.1 2.8,-0.2 4.2,-0.2c16.3,0 29.5,13.2 29.5,29.5C191.5,125.8 178.9,135 163.5,135z" />
+
+    <!-- White 'X' icon inside the cloud -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M115,90l-15,15l-15,-15l-6,6l15,15l-15,15l6,6l15,-15l15,15l6,-6l-15,-15l15,-15z" />
+</vector>

@@ -1,0 +1,142 @@
+@import "tailwindcss";
+
+:root {
+  /* M3 Light Palette */
+  --md-sys-color-primary: #005ac1;
+  --md-sys-color-on-primary: #ffffff;
+  --md-sys-color-primary-container: #d8e2ff;
+  --md-sys-color-on-primary-container: #001a41;
+
+  --md-sys-color-secondary: #575e71;
+  --md-sys-color-on-secondary: #ffffff;
+  --md-sys-color-secondary-container: #dbe2f9;
+  --md-sys-color-on-secondary-container: #141b2c;
+
+  --md-sys-color-tertiary: #715573;
+  --md-sys-color-on-tertiary: #ffffff;
+  --md-sys-color-tertiary-container: #fbd7fc;
+  --md-sys-color-on-tertiary-container: #29132d;
+
+  --md-sys-color-error: #ba1a1a;
+  --md-sys-color-on-error: #ffffff;
+  --md-sys-color-error-container: #ffdad6;
+  --md-sys-color-on-error-container: #410002;
+
+  --md-sys-color-surface: #fdfbff;
+  --md-sys-color-on-surface: #1b1b1f;
+  --md-sys-color-surface-variant: #e1e2ec;
+  --md-sys-color-on-surface-variant: #44474f;
+  --md-sys-color-outline: #74777f;
+
+  --background: var(--md-sys-color-surface);
+  --foreground: var(--md-sys-color-on-surface);
+}
+
+.dark {
+  /* M3 Dark Palette */
+  --md-sys-color-primary: #adc6ff;
+  --md-sys-color-on-primary: #002e69;
+  --md-sys-color-primary-container: #004494;
+  --md-sys-color-on-primary-container: #d8e2ff;
+
+  --md-sys-color-secondary: #bfc6dc;
+  --md-sys-color-on-secondary: #293041;
+  --md-sys-color-secondary-container: #3f4759;
+  --md-sys-color-on-secondary-container: #dbe2f9;
+
+  --md-sys-color-tertiary: #dfbbdf;
+  --md-sys-color-on-tertiary: #402843;
+  --md-sys-color-tertiary-container: #583e5a;
+  --md-sys-color-on-tertiary-container: #fbd7fc;
+
+  --md-sys-color-error: #ffb4ab;
+  --md-sys-color-on-error: #690005;
+  --md-sys-color-error-container: #93000a;
+  --md-sys-color-on-error-container: #ffdad6;
+
+  --md-sys-color-surface: #1b1b1f;
+  --md-sys-color-on-surface: #e3e2e6;
+  --md-sys-color-surface-variant: #44474f;
+  --md-sys-color-on-surface-variant: #c4c6d0;
+  --md-sys-color-outline: #8e9099;
+
+  --background: var(--md-sys-color-surface);
+  --foreground: var(--md-sys-color-on-surface);
+}
+
+@theme {
+  --color-primary: var(--md-sys-color-primary);
+  --color-on-primary: var(--md-sys-color-on-primary);
+  --color-primary-container: var(--md-sys-color-primary-container);
+  --color-on-primary-container: var(--md-sys-color-on-primary-container);
+
+  --color-secondary: var(--md-sys-color-secondary);
+  --color-on-secondary: var(--md-sys-color-on-secondary);
+  --color-secondary-container: var(--md-sys-color-secondary-container);
+  --color-on-secondary-container: var(--md-sys-color-on-secondary-container);
+
+  --color-surface: var(--md-sys-color-surface);
+  --color-on-surface: var(--md-sys-color-on-surface);
+  --color-surface-variant: var(--md-sys-color-surface-variant);
+  --color-on-surface-variant: var(--md-sys-color-on-surface-variant);
+
+  --color-outline: var(--md-sys-color-outline);
+  --color-error: var(--md-sys-color-error);
+
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-2xl: 32px;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-inter), system-ui, sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* M3 Typography Utils - Desktop Optimized */
+.text-display-large { @apply text-[57px] leading-[64px] tracking-[-0.25px] font-normal; }
+.text-display-medium { @apply text-[45px] leading-[52px] tracking-[0px] font-normal; }
+.text-display-small { @apply text-[36px] leading-[44px] tracking-[0px] font-normal; }
+
+.text-headline-large { @apply text-[32px] leading-[40px] tracking-[0px] font-normal; }
+.text-headline-medium { @apply text-[28px] leading-[36px] tracking-[0px] font-normal; }
+.text-headline-small { @apply text-[24px] leading-[32px] tracking-[0px] font-normal; }
+
+.text-title-large { @apply text-[22px] leading-[28px] tracking-[0px] font-medium; }
+.text-title-medium { @apply text-[16px] leading-[24px] tracking-[0.15px] font-medium; }
+.text-title-small { @apply text-[14px] leading-[20px] tracking-[0.1px] font-medium; }
+
+.text-body-large { @apply text-[18px] leading-[28px] tracking-[0.5px] font-normal; }
+.text-body-medium { @apply text-[16px] leading-[24px] tracking-[0.25px] font-normal; }
+.text-body-small { @apply text-[14px] leading-[20px] tracking-[0.4px] font-normal; }
+
+.text-label-large { @apply text-[14px] leading-[20px] tracking-[0.1px] font-medium; }
+.text-label-medium { @apply text-[12px] leading-[16px] tracking-[0.5px] font-medium; }
+.text-label-small { @apply text-[11px] leading-[16px] tracking-[0.5px] font-medium; }
+
+/* Desktop Ergonomic Overrides */
+@layer base {
+  button, a {
+    @apply min-w-[32px] min-h-[32px] flex items-center justify-center;
+  }
+}
+
+/* Custom Scrollbar M3 Style */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--md-sys-color-surface-variant);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--md-sys-color-outline);
+}

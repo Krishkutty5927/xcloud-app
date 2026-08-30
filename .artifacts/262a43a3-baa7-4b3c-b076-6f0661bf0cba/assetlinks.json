@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.cloud.x",
+      "sha256_cert_fingerprints": [
+        "C4:FF:5B:5E:9A:3A:19:58:BA:87:73:7C:07:CF:6E:E0:DD:46:75:B8:3D:BA:67:F5:4C:04:E2:7A:6E:59:26:5F"
+      ]
+    }
+  }
+]

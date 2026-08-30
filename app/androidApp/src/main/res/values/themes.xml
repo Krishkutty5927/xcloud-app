@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Regular App Theme -->
+    <style name="Theme.XCloud.App" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="colorPrimary">#0052CC</item>
+    </style>
+
+    <!-- Splash Screen Theme -->
+    <style name="Theme.XCloud.Splash" parent="Theme.SplashScreen">
+        <!-- Background color matching your SplashScreen.kt -->
+        <item name="windowSplashScreenBackground">#F8FAFC</item>
+
+        <!-- Use a transparent icon to "hide" the system logo and only show the background -->
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_transparent</item>
+
+        <!-- Theme to switch to once the splash screen finishes -->
+        <item name="postSplashScreenTheme">@style/Theme.XCloud.App</item>
+    </style>
+</resources>

@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">Xcloud</string>
+    <string name="default_web_client_id">550097665326-t6u7sqh1hrvq16tqpobqjhi6d0vju7un.apps.googleusercontent.com</string>
+
+    <!-- Replace with your actual Facebook App ID and Client Token -->
+    <string name="facebook_app_id">923695483510232</string>
+    <string name="fb_login_protocol_scheme">fb923695483510232</string>
+    <string name="facebook_client_token">46b7285c18264f9805646a4d15468603</string>
+</resources>
