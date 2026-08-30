@@ -34,7 +34,7 @@ import { formatFileSize, cn } from '@/lib/utils';
 import { uploadAvatar } from '@/lib/profile-manager';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
-import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
+import { updatePassword, EmailAuthProvider, reauthenticateWithCredential, sendPasswordResetEmail } from 'firebase/auth';
 import { motion, AnimatePresence } from 'framer-motion';
 import pkg from '../../../package.json';
 
