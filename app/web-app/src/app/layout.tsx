@@ -1,3 +1,4 @@
+import React, { Suspense } from "react";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
@@ -8,6 +9,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 
 import { LoginGate } from "@/components/auth/LoginGate";
+import { Loader2 } from "lucide-react";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -66,23 +68,29 @@ export default function RootLayout({
         />
       </head>
       <body className={`${inter.className} antialiased`}>
-        <AuthProvider>
-          <ToastProvider>
-            <SearchProvider>
-              <LoginGate>
-                <div className="flex min-h-screen overflow-hidden">
-                  <Sidebar />
-                  <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                    <Header />
-                    <main className="flex-1 overflow-y-auto">
-                      {children}
-                    </main>
+        <Suspense fallback={
+          <div className="min-h-screen flex items-center justify-center bg-white text-blue-600">
+            <Loader2 className="animate-spin" size={48} />
+          </div>
+        }>
+          <AuthProvider>
+            <ToastProvider>
+              <SearchProvider>
+                <LoginGate>
+                  <div className="flex min-h-screen overflow-hidden">
+                    <Sidebar />
+                    <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                      <Header />
+                      <div className="flex-1 overflow-y-auto">
+                        {children}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </LoginGate>
-            </SearchProvider>
-          </ToastProvider>
-        </AuthProvider>
+                </LoginGate>
+              </SearchProvider>
+            </ToastProvider>
+          </AuthProvider>
+        </Suspense>
       </body>
     </html>
   );
