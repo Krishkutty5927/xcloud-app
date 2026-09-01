@@ -1,6 +1,7 @@
 package com.cloud.x.repository
 
 import com.cloud.x.model.FileEntry
+import com.cloud.x.model.Invitation
 import com.cloud.x.model.UserMetadata
 import com.cloud.x.util.FileUploadManager
 import com.cloud.x.util.SupabaseManager
@@ -22,6 +23,74 @@ class FileRepository {
     private val firestore = Firebase.firestore
     private val supabase = SupabaseManager.client
     private val activityRepository = UserActivityRepository()
+
+    fun getSentInvitations(userId: String): Flow<List<Invitation>> {
+        return firestore.collection("invitations")
+            .where { "senderId" equalTo userId }
+            .snapshots()
+            .map { snapshot -> snapshot.documents.map { it.data<Invitation>() } }
+    }
+
+    fun getReceivedInvitations(email: String): Flow<List<Invitation>> {
+        return firestore.collection("invitations")
+            .where { "recipientEmail" equalTo email.lowercase() }
+            .where { "status" equalTo "PENDING" }
+            .snapshots()
+            .map { snapshot -> snapshot.documents.map { it.data<Invitation>() } }
+    }
+
+    suspend fun revokeInvitation(invitation: Invitation): Result<Unit> {
+        return try {
+            // 1. Delete invitation
+            firestore.collection("invitations").document(invitation.id).delete()
+
+            // 2. Update file's shared status
+            val fileRef = firestore.collection("users").document(invitation.senderId)
+                .collection("user_files").document(invitation.fileId)
+            
+            val snap = fileRef.get()
+            if (snap.exists) {
+                val file = snap.data<FileEntry>()
+                val updatedSharedWith = (file.sharedWith ?: emptyList()).filter { it.email != invitation.recipientEmail }
+                val updatedEmails = (file.sharedWithEmails ?: emptyList()).filter { it != invitation.recipientEmail }
+                
+                fileRef.update(
+                    "sharedWith" to updatedSharedWith,
+                    "sharedWithEmails" to updatedEmails,
+                    "isShared" to updatedSharedWith.isNotEmpty()
+                )
+            }
+
+            activityRepository.logActivity(invitation.senderId, "REVOKE", "Revoked access for ${invitation.fileName}", invitation.fileName)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun acceptInvitation(invitation: Invitation, userId: String, userEmail: String): Result<Unit> {
+        return try {
+            // 1. Update invitation status
+            firestore.collection("invitations").document(invitation.id).update("status" to "ACCEPTED")
+
+            // 2. Add collaborator to the file in sender's collection
+            val fileRef = firestore.collection("users").document(invitation.senderId)
+                .collection("user_files").document(invitation.fileId)
+            
+            val collaborator = mapOf("email" to userEmail.lowercase(), "role" to "viewer")
+            
+            fileRef.update(
+                "sharedWith" to FieldValue.arrayUnion(collaborator),
+                "sharedWithEmails" to FieldValue.arrayUnion(userEmail.lowercase()),
+                "isShared" to true
+            )
+
+            activityRepository.logActivity(userId, "SHARE", "Accepted access for ${invitation.fileName}", invitation.fileName)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 
     /**
      * Recursively updates the size of parent folders.
@@ -164,7 +233,7 @@ class FileRepository {
             }
 
             val fileId = "file_${currentTimeMillis()}_${(0..999).random()}"
-            val category = categorizeMimeType(mimeType)
+            val category = categorizeMimeType(mimeType, name)
             val cleanName = name.sanitizeFileName()
             
             // Align with web app pathing: userId/fileId-fileName
@@ -231,14 +300,27 @@ class FileRepository {
         }
     }
 
-    private fun categorizeMimeType(mimeType: String): String {
+    private fun categorizeMimeType(mimeType: String, fileName: String = ""): String {
+        val ext = fileName.substringAfterLast('.', "").lowercase()
+        val imageExts = listOf("jpg", "jpeg", "png", "webp", "avif", "gif", "svg", "ai", "psd", "heic", "heif", "raw", "dng", "cr2", "nef", "tiff", "tif", "bmp", "ico")
+        val videoExts = listOf("mp4", "webm", "m4v", "mkv", "ts", "m2ts", "mov", "avi", "wmv", "flv", "f4v", "3gp", "3g2", "vob")
+        val audioExts = listOf("mp3", "wav", "flac", "aac", "m4a", "ogg", "m4r", "amr", "opus")
+        val archiveExts = listOf("zip", "rar", "7z", "tar", "gz", "tgz", "iso", "bz2", "xz")
+        val exeExts = listOf("exe", "msi", "apk", "aab", "dmg", "deb", "rpm", "bat", "cmd", "sh", "bash", "env", "yaml", "yml")
+        val codeExts = listOf("html", "htm", "css", "js", "ts", "jsx", "tsx", "json", "xml", "sql", "php", "py", "kt", "java", "cpp", "c", "cs")
+        val fontExts = listOf("ttf", "otf", "woff", "woff2", "eot")
+        val docExts = listOf("docx", "doc", "odt", "rtf", "pages", "xlsx", "xls", "csv", "ods", "tsv", "pptx", "ppt", "odp", "key", "epub", "mobi", "azw", "azw3")
+
         return when {
-            mimeType.startsWith("image/") -> "Image"
-            mimeType.startsWith("video/") -> "Video"
-            mimeType.startsWith("audio/") -> "Audio"
-            mimeType.contains("zip") -> "ZIP"
-            mimeType == "application/pdf" -> "PDF"
-            mimeType.startsWith("text/") || mimeType == "application/json" || mimeType == "application/javascript" -> "Text"
+            mimeType.startsWith("image/") || (ext.isNotEmpty() && imageExts.contains(ext)) -> "Image"
+            mimeType.startsWith("video/") || (ext.isNotEmpty() && videoExts.contains(ext)) -> "Video"
+            mimeType.startsWith("audio/") || (ext.isNotEmpty() && audioExts.contains(ext)) -> "Audio"
+            mimeType.contains("zip") || (ext.isNotEmpty() && archiveExts.contains(ext)) -> "Archive"
+            ext.isNotEmpty() && exeExts.contains(ext) -> "System"
+            mimeType.startsWith("text/") || (ext.isNotEmpty() && codeExts.contains(ext)) || mimeType == "application/json" || mimeType == "application/javascript" -> "Code"
+            mimeType.contains("font") || (ext.isNotEmpty() && fontExts.contains(ext)) -> "Font"
+            mimeType == "application/pdf" || ext == "pdf" -> "PDF"
+            ext.isNotEmpty() && docExts.contains(ext) -> "Document"
             else -> "Document"
         }
     }
@@ -358,6 +440,71 @@ class FileRepository {
             
             // In a real app, this would be a deep link URL
             Result.success("https://xcloud.app/share/$shareId")
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun createInvitation(
+        sender: UserMetadata,
+        file: FileEntry,
+        recipientEmail: String?,
+        recipientPhone: String?,
+        passcode: String?,
+        expiryHours: Int
+    ): Result<String> {
+        return try {
+            val id = "invite_${currentTimeMillis()}_${(0..999).random()}"
+            val invite = Invitation(
+                id = id,
+                fileId = file.fileId,
+                fileName = file.fileName,
+                fileType = file.fileType,
+                fileSize = file.fileSize,
+                senderId = sender.uid,
+                senderEmail = sender.email,
+                senderName = sender.name,
+                recipientEmail = recipientEmail?.lowercase(),
+                recipientPhone = recipientPhone,
+                passcode = passcode?.uppercase(),
+                status = "PENDING",
+                createdAt = Timestamp.now(),
+                storagePath = file.storagePath,
+                downloadUrl = file.downloadUrl
+            )
+
+            firestore.collection("invitations").document(id).set(invite)
+
+            // Update file state
+            firestore.collection("users").document(sender.uid)
+                .collection("user_files").document(file.fileId)
+                .update("isShared" to true)
+
+            activityRepository.logActivity(sender.uid, "SHARE", "Sent invitation for ${file.fileName}", file.fileName)
+            Result.success(id)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun removeCollaborator(userId: String, fileId: String, email: String): Result<Unit> {
+        return try {
+            val fileRef = firestore.collection("users").document(userId)
+                .collection("user_files").document(fileId)
+            
+            val snap = fileRef.get()
+            if (snap.exists) {
+                val file = snap.data<FileEntry>()
+                val updatedSharedWith = (file.sharedWith ?: emptyList()).filter { it.email != email }
+                val updatedEmails = (file.sharedWithEmails ?: emptyList()).filter { it != email }
+                
+                fileRef.update(
+                    "sharedWith" to updatedSharedWith,
+                    "sharedWithEmails" to updatedEmails,
+                    "isShared" to updatedSharedWith.isNotEmpty()
+                )
+            }
+            Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
         }

@@ -1,22 +1,33 @@
 package com.cloud.x.app.shared.ui
 
+import androidx.compose.animation.*
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import coil3.compose.AsyncImage
 import com.cloud.x.model.FileEntry
@@ -24,20 +35,10 @@ import io.ktor.client.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import android.webkit.WebView
 import android.webkit.WebViewClient
-
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
-import androidx.media3.common.PlaybackParameters
-import androidx.media3.ui.AspectRatioFrameLayout
-import kotlinx.coroutines.delay
 
 @Composable
 actual fun PreviewContent(file: FileEntry) {
@@ -68,7 +69,12 @@ actual fun PreviewContent(file: FileEntry) {
                 modifier = Modifier.fillMaxSize()
             )
         }
-        file.fileType.contains("Text", true) -> {
+        file.fileType.contains("Text", true) || 
+        file.fileName.endsWith(".md", true) || 
+        file.fileName.endsWith(".markdown", true) || 
+        file.fileName.endsWith(".log", true) || 
+        file.fileName.endsWith(".csv", true) || 
+        file.fileName.endsWith(".tsv", true) -> {
             var textContent by remember { mutableStateOf<String?>(null) }
             var isLoading by remember { mutableStateOf(true) }
 
@@ -138,6 +144,7 @@ fun VideoPlayerPro(file: FileEntry) {
     var playbackSpeed by remember { mutableStateOf(1.0f) }
     var showControls by remember { mutableStateOf(true) }
     var resizeMode by remember { mutableStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
+    var isZapEnabled by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         onDispose { exoPlayer.release() }
@@ -287,9 +294,20 @@ fun VideoPlayerPro(file: FileEntry) {
                             }) {
                                 Text("${playbackSpeed}x", color = Color.White, fontWeight = FontWeight.Black)
                             }
+
+                            IconButton(onClick = {
+                                isZapEnabled = !isZapEnabled
+                                exoPlayer.setSkipSilenceEnabled(isZapEnabled)
+                            }) {
+                                Icon(
+                                    Icons.Default.Bolt,
+                                    null,
+                                    tint = if (isZapEnabled) MaterialTheme.colorScheme.primary else Color.White
+                                )
+                            }
                             
                             IconButton(onClick = { /* Volume logic or toggle */ }) {
-                                Icon(Icons.Default.VolumeUp, null, tint = Color.White)
+                                Icon(Icons.AutoMirrored.Filled.VolumeUp, null, tint = Color.White)
                             }
                         }
                     }
@@ -312,6 +330,6 @@ private fun getFileIcon(fileType: String): ImageVector {
         fileType.contains("video", true) -> Icons.Default.Videocam
         fileType.contains("audio", true) -> Icons.Default.Audiotrack
         fileType.contains("PDF", true) -> Icons.Default.PictureAsPdf
-        else -> Icons.Default.InsertDriveFile
+        else -> Icons.AutoMirrored.Filled.InsertDriveFile
     }
 }

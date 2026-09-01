@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -32,7 +33,9 @@ import com.cloud.x.app.shared.ui.components.StorageBreakdownWidget
 import com.cloud.x.app.shared.viewmodel.DashboardViewModel
 import com.cloud.x.app.shared.viewmodel.StorageViewModel
 import com.cloud.x.model.FileEntry
+import com.cloud.x.model.Invitation
 import com.cloud.x.model.UserActivity
+import com.cloud.x.model.UserDevice
 import com.cloud.x.model.UserMetadata
 import com.cloud.x.repository.AuthRepository
 import com.cloud.x.util.FileUploadManager
@@ -112,6 +115,9 @@ fun DashboardScreen(
     val storageBreakdown by viewModel.storageBreakdown.collectAsState()
     val uploadStatus by viewModel.uploadStatus.collectAsState()
     val activities by viewModel.activities.collectAsState(emptyList())
+    val sentInvitations by viewModel.sentInvitations.collectAsState()
+    val receivedInvitations by viewModel.receivedInvitations.collectAsState()
+    val devices by viewModel.devices.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
 
     // Notify native platform of upload status changes
@@ -122,6 +128,7 @@ fun DashboardScreen(
     var currentTab by remember { mutableStateOf(DashboardTab.Home) }
     var showProfileSheet by remember { mutableStateOf(value = false) }
     var showActivitySheet by remember { mutableStateOf(false) }
+    var showDevicesSheet by remember { mutableStateOf(false) }
     var showUploadSheet by remember { mutableStateOf(false) }
     var showTrashScreen by remember { mutableStateOf(false) }
     var showResetPasswordDialog by remember { mutableStateOf(false) }
@@ -137,6 +144,7 @@ fun DashboardScreen(
     
     val profileSheetState = rememberModalBottomSheetState()
     val activitySheetState = rememberModalBottomSheetState()
+    val devicesSheetState = rememberModalBottomSheetState()
     val uploadSheetState = rememberModalBottomSheetState()
     val shareSheetState = rememberModalBottomSheetState()
     val actionSheetState = rememberModalBottomSheetState()
@@ -329,7 +337,9 @@ fun DashboardScreen(
                             contentPadding = screenPadding
                         )
                         DashboardTab.Shared -> SharedScreen(
-                            files = sharedFiles, 
+                            files = sharedFiles,
+                            sentInvitations = sentInvitations,
+                            receivedInvitations = receivedInvitations,
                             onFileClick = { 
                                 viewModel.onFileClick(it)
                                 if (it.fileType == "Folder") viewModel.navigateToFolder(it)
@@ -337,6 +347,8 @@ fun DashboardScreen(
                             },
                             onShare = { shareFile = it },
                             onMoreClick = { selectedFileForAction = it },
+                            onRevokeInvite = { viewModel.revokeInvitation(it) },
+                            onAcceptInvite = { viewModel.acceptInvitation(it) },
                             contentPadding = screenPadding
                         )
                         DashboardTab.Files -> DriveExplorerScreen(
@@ -405,7 +417,23 @@ fun DashboardScreen(
                 },
                 onUpdatePreference = { path, enabled ->
                     storageViewModel.updatePreference(path, enabled)
+                },
+                onDevicesClick = {
+                    showProfileSheet = false
+                    showDevicesSheet = true
                 }
+            )
+        }
+    }
+
+    if (showDevicesSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showDevicesSheet = false },
+            sheetState = devicesSheetState
+        ) {
+            DevicesSheetContent(
+                devices = devices,
+                onDisconnect = { viewModel.disconnectDevice(it) }
             )
         }
     }
@@ -432,6 +460,12 @@ fun DashboardScreen(
                 onGenerateLink = { passcode, expiry ->
                     viewModel.generateShareLink(shareFile!!, passcode, expiry)
                     shareFile = null
+                },
+                onInviteUser = { email, phone, passcode, expiry ->
+                    viewModel.inviteUser(shareFile!!, email, phone, passcode, expiry * 24)
+                },
+                onRemoveCollaborator = { collab ->
+                    viewModel.removeCollaborator(shareFile!!, collab.email)
                 },
                 onDismiss = { shareFile = null }
             )
@@ -703,10 +737,20 @@ fun DriveSearchBar(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 if (isRefreshing) {
+                                    val infiniteTransition = rememberInfiniteTransition()
+                                    val pulseAlpha by infiniteTransition.animateFloat(
+                                        initialValue = 0.4f,
+                                        targetValue = 1f,
+                                        animationSpec = infiniteRepeatable(
+                                            animation = tween(800, easing = FastOutSlowInEasing),
+                                            repeatMode = RepeatMode.Reverse
+                                        )
+                                    )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Box(
                                         modifier = Modifier
                                             .size(6.dp)
+                                            .graphicsLayer { alpha = pulseAlpha }
                                             .clip(CircleShape)
                                             .background(MaterialTheme.colorScheme.primary)
                                     )
@@ -912,6 +956,7 @@ fun ProfileSheetContent(
     onEditProfileClick: () -> Unit = {},
     onAvatarClick: () -> Unit = {},
     onChangePasswordClick: () -> Unit = {},
+    onDevicesClick: () -> Unit = {},
     onToggleBiometric: (Boolean) -> Unit = {},
     onUpdatePreference: (String, Boolean) -> Unit = { _, _ -> }
 ) {
@@ -1033,6 +1078,14 @@ fun ProfileSheetContent(
         HorizontalDivider(modifier = Modifier.padding(horizontal = 24.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
         
         user?.let {
+            ListItem(
+                headlineContent = { Text("Hardware Nodes", fontWeight = FontWeight.Bold) },
+                supportingContent = { Text("Manage authorized devices", style = MaterialTheme.typography.labelSmall) },
+                leadingContent = { Icon(Icons.Default.Smartphone, null, tint = MaterialTheme.colorScheme.primary) },
+                trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.outline) },
+                modifier = Modifier.clickable { onDevicesClick() }.padding(horizontal = 8.dp)
+            )
+
             ListItem(
                 headlineContent = { Text("Biometric 2FA", fontWeight = FontWeight.Bold) },
                 supportingContent = { Text("Secure vault access with your fingerprint or face", style = MaterialTheme.typography.labelSmall) },
@@ -1175,6 +1228,110 @@ fun AvatarPlaceholder(text: String) {
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onPrimaryContainer
         )
+    }
+}
+
+@Composable
+fun DevicesSheetContent(
+    devices: List<UserDevice>,
+    onDisconnect: (UserDevice) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 32.dp)
+    ) {
+        Text(
+            "Authorized Hardware Nodes",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Black,
+            modifier = Modifier.padding(24.dp)
+        )
+
+        if (devices.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxWidth().height(200.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.Devices, null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.outline)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("No other nodes detected", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        } else {
+            LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                items(devices) { device ->
+                    ListItem(
+                        headlineContent = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(device.name, fontWeight = FontWeight.Bold)
+                                if (device.isCurrent) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Surface(
+                                        color = Color(0xFF4CAF50),
+                                        shape = RoundedCornerShape(4.dp)
+                                    ) {
+                                        Text(
+                                            "ACTIVE NOW",
+                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Black
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        supportingContent = {
+                            Column {
+                                Text("${device.type} • ${device.location}")
+                                Text("IP: ${device.ip}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                            }
+                        },
+                        leadingContent = {
+                            val icon = when (device.type.lowercase()) {
+                                "web", "browser" -> Icons.Default.Monitor
+                                "android", "ios", "smartphone" -> Icons.Default.Smartphone
+                                else -> Icons.Default.Devices
+                            }
+                            Surface(
+                                modifier = Modifier.size(40.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                }
+                            }
+                        },
+                        trailingContent = {
+                            if (!device.isCurrent) {
+                                TextButton(onClick = { onDisconnect(device) }) {
+                                    Text("Disconnect", color = MaterialTheme.colorScheme.error)
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        Card(
+            modifier = Modifier.padding(horizontal = 24.dp).fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
+        ) {
+            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.DeveloperBoard, null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.width(16.dp))
+                Text(
+                    "XCloud uses hardware-bound identity. Remote decommissioning terminates all access nodes instantly.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+        }
     }
 }
 

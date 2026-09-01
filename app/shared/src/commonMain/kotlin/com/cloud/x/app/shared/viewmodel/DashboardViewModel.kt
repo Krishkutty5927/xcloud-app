@@ -3,7 +3,9 @@ package com.cloud.x.app.shared.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cloud.x.model.FileEntry
+import com.cloud.x.model.Invitation
 import com.cloud.x.model.UserActivity
+import com.cloud.x.model.UserDevice
 import com.cloud.x.model.UserMetadata
 import com.cloud.x.repository.UserActivityRepository
 import com.cloud.x.repository.AuthRepository
@@ -41,6 +43,15 @@ class DashboardViewModel(
 
     private val _activities = MutableStateFlow<List<UserActivity>>(emptyList())
     val activities: StateFlow<List<UserActivity>> = _activities.asStateFlow()
+
+    private val _sentInvitations = MutableStateFlow<List<Invitation>>(emptyList())
+    val sentInvitations = _sentInvitations.asStateFlow()
+
+    private val _receivedInvitations = MutableStateFlow<List<Invitation>>(emptyList())
+    val receivedInvitations = _receivedInvitations.asStateFlow()
+
+    private val _devices = MutableStateFlow<List<UserDevice>>(emptyList())
+    val devices = _devices.asStateFlow()
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery = _searchQuery.asStateFlow()
@@ -121,7 +132,9 @@ class DashboardViewModel(
                 file.fileType.contains("image", true) -> images += file.fileSize
                 file.fileType.contains("video", true) -> videos += file.fileSize
                 file.fileType.contains("audio", true) -> audio += file.fileSize
-                file.fileType.contains("pdf", true) || file.fileType.contains("doc", true) -> documents += file.fileSize
+                file.fileType.contains("pdf", true) || 
+                file.fileType.contains("doc", true) || 
+                file.fileType.contains("text", true) -> documents += file.fileSize
                 else -> others += file.fileSize
             }
         }
@@ -169,6 +182,63 @@ class DashboardViewModel(
             activityRepository.getRecentActivities(user.uid).collectLatest {
                 _activities.value = it
             }
+        }
+        viewModelScope.launch {
+            fileRepository.getSentInvitations(user.uid).collectLatest {
+                _sentInvitations.value = it
+            }
+        }
+        user.email?.let { email ->
+            viewModelScope.launch {
+                fileRepository.getReceivedInvitations(email).collectLatest {
+                    _receivedInvitations.value = it
+                }
+            }
+        }
+        viewModelScope.launch {
+            try {
+                userRepository.observeDevices(user.uid)
+                    .catch { e -> println("[DASHBOARD] Device sync failed: ${e.message}") }
+                    .collectLatest {
+                        _devices.value = it
+                    }
+            } catch (e: Exception) {
+                println("[DASHBOARD] Device launch failed: ${e.message}")
+            }
+        }
+    }
+
+    fun inviteUser(file: FileEntry, email: String, phone: String?, passcode: String?, expiryHours: Int) {
+        val user = _userMetadata.value ?: return
+        viewModelScope.launch {
+            fileRepository.createInvitation(user, file, email, phone, passcode, expiryHours)
+        }
+    }
+
+    fun removeCollaborator(file: FileEntry, email: String) {
+        val user = authRepository.getCurrentUser() ?: return
+        viewModelScope.launch {
+            fileRepository.removeCollaborator(user.uid, file.fileId, email)
+        }
+    }
+
+    fun revokeInvitation(invitation: Invitation) {
+        viewModelScope.launch {
+            fileRepository.revokeInvitation(invitation)
+        }
+    }
+
+    fun acceptInvitation(invitation: Invitation) {
+        val user = authRepository.getCurrentUser() ?: return
+        viewModelScope.launch {
+            fileRepository.acceptInvitation(invitation, user.uid, user.email ?: "")
+        }
+    }
+
+    fun disconnectDevice(device: UserDevice) {
+        val user = authRepository.getCurrentUser() ?: return
+        viewModelScope.launch {
+            userRepository.disconnectDevice(user.uid, device.deviceId)
         }
     }
 

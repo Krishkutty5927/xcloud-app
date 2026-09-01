@@ -1,10 +1,12 @@
 package com.cloud.x.repository
 
+import com.cloud.x.model.UserDevice
 import com.cloud.x.model.UserMetadata
 import com.cloud.x.util.SupabaseManager
 import com.cloud.x.util.currentTimeMillis
 import dev.gitlive.firebase.Firebase
 import dev.gitlive.firebase.firestore.firestore
+import dev.gitlive.firebase.firestore.Timestamp
 import io.github.jan.supabase.storage.storage
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -64,6 +66,23 @@ class UserRepository {
             updatePreference(userId, "profilePictureUrl", publicUrl)
 
             Result.success(publicUrl)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    fun observeDevices(userId: String): Flow<List<UserDevice>> {
+        return firestore.collection("users").document(userId)
+            .collection("devices").snapshots().map { snapshot ->
+                snapshot.documents.map { it.data<UserDevice>() }
+            }
+    }
+
+    suspend fun disconnectDevice(userId: String, deviceId: String): Result<Unit> {
+        return try {
+            firestore.collection("users").document(userId)
+                .collection("devices").document(deviceId).delete()
+            Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
         }

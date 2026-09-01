@@ -1,5 +1,7 @@
 package com.cloud.x
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -182,93 +184,101 @@ fun App(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
-            if (isInitializing) {
-                SplashScreen()
-            } else if (user == null) {
-                AuthScreen(
-                    viewModel = authViewModel,
-                    onGoogleSignInClick = {
-                        onGoogleSignInClick(scope, { idToken ->
-                            authViewModel.onGoogleSignInResult(idToken)
-                        }, { error ->
-                            authViewModel.onSignInError(error)
-                        })
-                    },
-                    onFacebookSignInClick = {
-                        onFacebookSignInClick(scope, { accessToken ->
-                            authViewModel.onFacebookSignInResult(accessToken)
-                        }, { error ->
-                            authViewModel.onSignInError(error)
-                        })
-                    },
-                    onAppleSignInClick = {
-                        onAppleSignInClick(scope, { idToken, nonce ->
-                            authViewModel.onAppleSignInResult(idToken, nonce)
-                        }, { error ->
-                            authViewModel.onSignInError(error)
-                        })
-                    }
-                )
-            } else if (isLocked) {
-                // Vault Locked Screen
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Surface(
-                            modifier = Modifier.size(100.dp),
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primaryContainer
-                        ) {
-                            Icon(
-                                Icons.Default.Fingerprint,
-                                null,
-                                modifier = Modifier.padding(24.dp).size(48.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
+            AnimatedContent(
+                targetState = Triple(isInitializing, user == null, isLocked),
+                transitionSpec = {
+                    fadeIn(animationSpec = tween(500)) togetherWith fadeOut(animationSpec = tween(500))
+                },
+                label = "AppScreenTransition"
+            ) { state ->
+                val (initializing, loggedOut, locked) = state
+                when {
+                    initializing -> SplashScreen()
+                    loggedOut -> AuthScreen(
+                        viewModel = authViewModel,
+                        onGoogleSignInClick = {
+                            onGoogleSignInClick(scope, { idToken ->
+                                authViewModel.onGoogleSignInResult(idToken)
+                            }, { error ->
+                                authViewModel.onSignInError(error)
+                            })
+                        },
+                        onFacebookSignInClick = {
+                            onFacebookSignInClick(scope, { accessToken ->
+                                authViewModel.onFacebookSignInResult(accessToken)
+                            }, { error ->
+                                authViewModel.onSignInError(error)
+                            })
+                        },
+                        onAppleSignInClick = {
+                            onAppleSignInClick(scope, { idToken, nonce ->
+                                authViewModel.onAppleSignInResult(idToken, nonce)
+                            }, { error ->
+                                authViewModel.onSignInError(error)
+                            })
                         }
-                        Spacer(modifier = Modifier.height(24.dp))
-                        Text("Vault Locked", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
-                        Text(
-                            "Biometric authentication required",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(48.dp))
-                        Button(
-                            onClick = {
-                                onBiometricAuthClick(
-                                    "Vault Locked",
-                                    "Authenticate to access your encrypted files",
-                                    { 
-                                        isLocked = false
-                                        hasAuthenticatedSession = true
-                                    },
-                                    { _ -> }
+                    )
+                    locked -> {
+                        // Vault Locked Screen
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Surface(
+                                    modifier = Modifier.size(100.dp),
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.primaryContainer
+                                ) {
+                                    Icon(
+                                        Icons.Default.Fingerprint,
+                                        null,
+                                        modifier = Modifier.padding(24.dp).size(48.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(24.dp))
+                                Text("Vault Locked", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
+                                Text(
+                                    "Biometric authentication required",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                            },
-                            shape = RoundedCornerShape(16.dp)
-                        ) {
-                            Text("Unlock Vault")
+                                Spacer(modifier = Modifier.height(48.dp))
+                                Button(
+                                    onClick = {
+                                        onBiometricAuthClick(
+                                            "Vault Locked",
+                                            "Authenticate to access your encrypted files",
+                                            { 
+                                                isLocked = false
+                                                hasAuthenticatedSession = true
+                                            },
+                                            { _ -> }
+                                        )
+                                    },
+                                    shape = RoundedCornerShape(16.dp)
+                                ) {
+                                    Text("Unlock Vault")
+                                }
+                            }
                         }
                     }
+                    else -> DashboardScreen(
+                        viewModel = dashboardViewModel,
+                        storageViewModel = storageViewModel,
+                        isDarkTheme = isDarkTheme,
+                        onThemeToggle = { isDarkTheme = !isDarkTheme },
+                        onSignOutClick = {
+                            showSignOutConfirm = true
+                        },
+                        onPickFileClick = onPickFileClick,
+                        onPickAvatarClick = onPickAvatarClick,
+                        onScanClick = onScanClick,
+                        onUploadStatusChange = onUploadStatusChange,
+                        onBiometricAuthClick = onBiometricAuthClick
+                    )
                 }
-            } else {
-                DashboardScreen(
-                    viewModel = dashboardViewModel,
-                    storageViewModel = storageViewModel,
-                    isDarkTheme = isDarkTheme,
-                    onThemeToggle = { isDarkTheme = !isDarkTheme },
-                    onSignOutClick = {
-                        showSignOutConfirm = true
-                    },
-                    onPickFileClick = onPickFileClick,
-                    onPickAvatarClick = onPickAvatarClick,
-                    onScanClick = onScanClick,
-                    onUploadStatusChange = onUploadStatusChange,
-                    onBiometricAuthClick = onBiometricAuthClick
-                )
             }
         }
 

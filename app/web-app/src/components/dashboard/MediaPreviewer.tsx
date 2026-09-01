@@ -39,7 +39,7 @@ export const MediaPreviewer = ({ file, isOpen, onClose }: MediaPreviewerProps) =
       setIsLoading(true);
       setTextContent(null);
 
-      if (file.fileType === 'Text') {
+      if (file.fileType === 'Text' || file.fileType === 'Code') {
         fetch(file.downloadUrl)
           .then(res => {
             if (!res.ok) throw new Error("Network response was not ok");
@@ -60,11 +60,15 @@ export const MediaPreviewer = ({ file, isOpen, onClose }: MediaPreviewerProps) =
 
   if (!file) return null;
 
+  const browserSupportedImages = ['jpg', 'jpeg', 'png', 'webp', 'avif', 'gif', 'svg', 'bmp', 'ico'];
+  const ext = file.fileName.split('.').pop()?.toLowerCase() || '';
+
   const isImage = file.fileType === 'Image';
+  const isBrowserImage = isImage && browserSupportedImages.includes(ext);
   const isVideo = file.fileType === 'Video';
   const isPDF = file.fileType === 'PDF';
   const isAudio = file.fileType === 'Audio';
-  const isText = file.fileType === 'Text';
+  const isText = file.fileType === 'Text' || file.fileType === 'Code';
 
   const handleDownload = () => {
     const link = document.createElement('a');
@@ -109,7 +113,7 @@ export const MediaPreviewer = ({ file, isOpen, onClose }: MediaPreviewerProps) =
             </div>
 
             <div className="flex items-center gap-3">
-              {isImage && (
+              {isBrowserImage && (
                 <>
                   <div className="flex items-center bg-surface-variant/30 rounded-2xl p-1.5 border border-outline/5">
                     <button onClick={() => setZoom(prev => Math.max(0.5, prev - 0.25))} className="p-2 text-on-surface-variant hover:bg-surface-variant rounded-xl transition-all"><ZoomOut size={20} /></button>
@@ -154,21 +158,40 @@ export const MediaPreviewer = ({ file, isOpen, onClose }: MediaPreviewerProps) =
                animate={{ scale: 1, opacity: 1, y: 0 }}
                transition={{ type: 'spring', damping: 30, stiffness: 200 }}
                className="relative w-full h-full max-h-[calc(100vh-theme(spacing.20)-theme(spacing.28)-2rem)] flex items-center justify-center z-10"
-               style={{
-                 scale: zoom,
-                 rotate: rotation
-               }}
              >
                 {isVideo ? (
                   <VideoPlayer file={file} onClose={onClose} />
-                ) : isImage && (
-                  <img
+                ) : isBrowserImage ? (
+                  <motion.img
                     src={file.downloadUrl}
                     alt={file.fileName}
                     onLoad={() => setIsLoading(false)}
-                    className="max-w-full max-h-[75vh] object-contain rounded-3xl shadow-[0_32px_64px_-12px_rgba(0,0,0,0.4)] border border-outline/10"
+                    style={{
+                        scale: zoom,
+                        rotate: rotation
+                    }}
+                    className="max-w-full max-h-full object-contain rounded-3xl shadow-[0_32px_64px_-12px_rgba(0,0,0,0.4)] border border-outline/10 transition-transform duration-200"
                   />
-                )}
+                ) : isImage ? (
+                  <div className="bg-surface-variant/20 backdrop-blur-xl p-24 rounded-[4rem] border border-outline/10 text-center space-y-6 shadow-2xl max-w-lg">
+                    <div className="w-32 h-32 bg-primary-container text-primary rounded-[2.5rem] flex items-center justify-center mx-auto shadow-inner border border-primary/10">
+                       <ImageIcon size={64} />
+                    </div>
+                    <div className="space-y-2">
+                       <h3 className="text-on-surface text-2xl font-black tracking-tight">Pro Image Format</h3>
+                       <p className="text-on-surface-variant font-medium text-sm leading-relaxed">
+                         This specialized {ext.toUpperCase()} node requires local professional tools for rendering.
+                         Protocol: Secure Download & Process.
+                       </p>
+                    </div>
+                    <button
+                      onClick={handleDownload}
+                      className="px-10 py-4 bg-primary text-on-primary font-black rounded-3xl transition-all hover:shadow-xl shadow-primary/20 active:scale-95 uppercase tracking-widest text-xs"
+                    >
+                       Acquire Full Asset
+                    </button>
+                  </div>
+                ) : null}
 
                 {isAudio && (
                    <div className="bg-surface-variant/20 backdrop-blur-xl border border-outline/10 p-16 rounded-[4rem] text-center space-y-8 shadow-2xl">

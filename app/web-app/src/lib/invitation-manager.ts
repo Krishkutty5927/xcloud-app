@@ -10,7 +10,9 @@ import {
   where,
   getDocs,
   Timestamp,
-  arrayUnion
+  arrayUnion,
+  deleteDoc,
+  arrayRemove
 } from "firebase/firestore";
 import { FileEntry } from "./upload-manager";
 import { logActivity } from "./activity-manager";
@@ -106,6 +108,35 @@ export const acceptInvitation = async (
   });
 
   await logActivity(recipientId, 'SHARE', `Accepted invitation for ${invitation.fileName}`, invitation.fileName);
+};
+
+/**
+ * Revokes/Cancels an invitation sent by the user.
+ */
+export const revokeInvitation = async (invitation: Invitation) => {
+  const inviteRef = doc(db, 'invitations', invitation.id);
+
+  // 1. Delete the invitation record
+  await deleteDoc(inviteRef);
+
+  // 2. Update the file's shared state in sender's collection
+  const fileRef = doc(db, 'users', invitation.senderId, 'user_files', invitation.fileId);
+
+  // Get current file to check if other shares exist
+  const fileSnap = await getDoc(fileRef);
+  if (fileSnap.exists()) {
+    const fileData = fileSnap.data();
+    const updatedSharedWith = (fileData.sharedWith || []).filter((s: any) => s.email !== invitation.recipientEmail);
+    const updatedEmails = (fileData.sharedWithEmails || []).filter((e: string) => e !== invitation.recipientEmail);
+
+    await updateDoc(fileRef, {
+      sharedWith: updatedSharedWith,
+      sharedWithEmails: updatedEmails,
+      isShared: updatedSharedWith.length > 0
+    });
+  }
+
+  await logActivity(invitation.senderId, 'REVOKE', `Revoked access for ${invitation.fileName}`, invitation.fileName);
 };
 
 /**

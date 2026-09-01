@@ -103,7 +103,7 @@ export const uploadFile = async (
     const fileEntry: FileEntry = {
       fileId,
       fileName: file.name,
-      fileType: categorizeMimeType(file.type),
+      fileType: categorizeMimeType(file.type, file.name),
       fileSize: file.size,
       downloadUrl: publicUrl,
       uploadTimestamp: serverTimestamp(),
@@ -140,12 +140,42 @@ export const uploadFile = async (
   }
 };
 
-const categorizeMimeType = (mimeType: string): string => {
-  if (mimeType.startsWith("image/")) return "Image";
-  if (mimeType.startsWith("video/")) return "Video";
-  if (mimeType.startsWith("audio/")) return "Audio";
-  if (mimeType.includes("zip")) return "ZIP";
-  if (mimeType === "application/pdf") return "PDF";
-  if (mimeType.startsWith("text/") || mimeType === "application/json" || mimeType === "application/javascript") return "Text";
+const categorizeMimeType = (mimeType: string, fileName: string = ''): string => {
+  const ext = fileName.split('.').pop()?.toLowerCase();
+
+  // 1. Image Categories
+  const imageExts = ['jpg', 'jpeg', 'png', 'webp', 'avif', 'gif', 'svg', 'ai', 'psd', 'heic', 'heif', 'raw', 'dng', 'cr2', 'nef', 'tiff', 'tif', 'bmp', 'ico'];
+  if (mimeType.startsWith("image/") || (ext && imageExts.includes(ext))) return "Image";
+
+  // 2. Video Categories
+  const videoExts = ['mp4', 'webm', 'm4v', 'mkv', 'ts', 'm2ts', 'mov', 'avi', 'wmv', 'flv', 'f4v', '3gp', '3g2', 'vob'];
+  if (mimeType.startsWith("video/") || (ext && videoExts.includes(ext))) return "Video";
+
+  // 3. Audio Categories
+  const audioExts = ['mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg', 'm4r', 'amr', 'opus'];
+  if (mimeType.startsWith("audio/") || (ext && audioExts.includes(ext))) return "Audio";
+
+  // 4. Archive Categories
+  const archiveExts = ['zip', 'rar', '7z', 'tar', 'gz', 'tgz', 'iso', 'bz2', 'xz'];
+  if (mimeType.includes("zip") || (ext && archiveExts.includes(ext))) return "Archive";
+
+  // 5. Executable & System
+  const exeExts = ['exe', 'msi', 'apk', 'aab', 'dmg', 'deb', 'rpm', 'bat', 'cmd', 'sh', 'bash', 'env', 'yaml', 'yml'];
+  if (ext && exeExts.includes(ext)) return "System";
+
+  // 6. Code & Web
+  const codeExts = ['html', 'htm', 'css', 'js', 'ts', 'jsx', 'tsx', 'json', 'xml', 'sql', 'php', 'py', 'kt', 'java', 'cpp', 'c', 'cs'];
+  if (mimeType.startsWith("text/") || (ext && codeExts.includes(ext))) return "Code";
+
+  // 7. Font Categories
+  const fontExts = ['ttf', 'otf', 'woff', 'woff2', 'eot'];
+  if (mimeType.includes("font") || (ext && fontExts.includes(ext))) return "Font";
+
+  if (mimeType === "application/pdf" || ext === 'pdf') return "PDF";
+
+  // 8. Document Categories
+  const docExts = ['docx', 'doc', 'odt', 'rtf', 'pages', 'xlsx', 'xls', 'csv', 'ods', 'tsv', 'pptx', 'ppt', 'odp', 'key', 'epub', 'mobi', 'azw', 'azw3'];
+  if (ext && docExts.includes(ext)) return "Document";
+
   return "Document";
 };

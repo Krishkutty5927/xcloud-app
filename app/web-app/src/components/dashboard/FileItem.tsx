@@ -9,6 +9,7 @@ import {
   Music,
   Folder as FolderIcon,
   MoreVertical,
+  MoreHorizontal,
   Star,
   Download,
   Share2,
@@ -20,7 +21,11 @@ import {
   Clock,
   Globe,
   Lock,
-  Info
+  Info,
+  Archive,
+  Terminal,
+  Code as CodeIcon,
+  Type as FontIcon
 } from 'lucide-react';
 import { cn, formatFileSize } from '@/lib/utils';
 import { FileEntry } from '@/lib/upload-manager';
@@ -47,12 +52,21 @@ interface FileItemProps {
   onDelete: (file: FileEntry) => void;
 }
 
-const getFileIcon = (type: string) => {
+const getFileIcon = (type: string, fileName: string = '') => {
+  const ext = fileName.split('.').pop()?.toLowerCase();
+
   switch (type) {
     case 'Folder': return <FolderIcon className="text-amber-500 fill-amber-500/20" />;
-    case 'Image': return <ImageIcon className="text-blue-500" />;
+    case 'Image':
+      if (ext === 'svg' || ext === 'ai') return <ImageIcon className="text-emerald-500" />;
+      if (ext === 'psd' || ext === 'raw' || ext === 'dng') return <ImageIcon className="text-orange-500" />;
+      return <ImageIcon className="text-blue-500" />;
     case 'Video': return <Video className="text-purple-500" />;
     case 'Audio': return <Music className="text-pink-500" />;
+    case 'Archive': return <Archive className="text-amber-600" />;
+    case 'System': return <Terminal className="text-slate-600" />;
+    case 'Code': return <CodeIcon className="text-indigo-500" />;
+    case 'Font': return <FontIcon className="text-cyan-600" />;
     case 'PDF': return <FileText className="text-red-500" />;
     case 'Text': return <FileText className="text-emerald-500" />;
     default: return <File className="text-gray-500" />;
@@ -84,9 +98,9 @@ export const FileItem = memo(({
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       className={cn(
-        "group bg-surface-variant/20 border border-outline/5 rounded-[2rem] p-6 hover:bg-surface-variant/40 hover:border-primary/20 hover:shadow-xl transition-all relative overflow-hidden cursor-pointer",
+        "group bg-surface-variant/20 border border-outline/5 rounded-[2rem] p-6 hover:bg-surface-variant/40 hover:border-primary/20 hover:shadow-xl transition-all relative cursor-pointer",
         (isActive || isSelected) ? "ring-2 ring-primary bg-primary-container/10" : "",
-        viewMode === 'list' && "flex items-center justify-between p-4"
+        viewMode === 'list' && "flex items-center justify-between p-4 overflow-hidden"
       )}
     >
       {/* Selection Checkbox */}
@@ -107,8 +121,8 @@ export const FileItem = memo(({
 
       {file.isPubliclyShared && (
         <div className={cn(
-          "absolute z-10 animate-in fade-in slide-in-from-right-2 duration-500",
-          viewMode === 'grid' ? "top-6 right-16" : "right-24"
+          "absolute z-10 animate-in fade-in slide-in-from-top-2 duration-500",
+          viewMode === 'grid' ? "top-3 left-1/2 -translate-x-1/2" : "right-24"
         )}>
           <div className="bg-emerald-500 text-white text-[8px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1.5 border border-white/20">
             <Globe size={10} />
@@ -130,9 +144,9 @@ export const FileItem = memo(({
 
       <div className={cn("flex items-center gap-5", viewMode === 'grid' && "flex-col items-start mb-6")}>
         <div className="w-14 h-14 bg-surface rounded-2xl flex items-center justify-center shadow-sm group-hover:bg-primary-container/30 transition-colors shrink-0">
-          {getFileIcon(file.fileType)}
+          {getFileIcon(file.fileType, file.fileName)}
         </div>
-        <div className="min-w-0 flex-1 w-full">
+        <div className={cn("min-w-0 flex-1 w-full", viewMode === 'grid' && "pr-8")}>
           {editingFile === file.fileId ? (
             <div className="flex items-center gap-2">
               <input
@@ -188,9 +202,9 @@ export const FileItem = memo(({
         )}
         <div className="relative group/menu">
           <button className="p-2.5 text-on-surface-variant hover:bg-surface-variant rounded-xl transition-colors">
-            <MoreVertical size={20} />
+            <MoreHorizontal size={20} />
           </button>
-          <div className="absolute right-0 mt-3 w-56 bg-surface border border-outline/10 shadow-2xl rounded-[1.5rem] py-2.5 z-20 hidden group-hover/menu:block animate-in fade-in zoom-in duration-200">
+          <div className="absolute right-0 top-full mt-2 w-56 bg-surface border border-outline/10 shadow-2xl rounded-[1.5rem] py-2.5 z-[60] hidden group-hover/menu:block animate-in fade-in zoom-in duration-200">
              {[
                { icon: Edit2, label: 'Rename', action: () => onCancelRename() /* Triggered from outside */ },
                { icon: Download, label: 'Download', action: () => onDownload(file) },

@@ -21,7 +21,11 @@ import {
   Info,
   Shield,
   Unlock,
-  Lock
+  Lock,
+  Archive,
+  Terminal,
+  Code as CodeIcon,
+  Type as FontIcon
 } from 'lucide-react';
 import { FileEntry } from '@/lib/upload-manager';
 import { formatFileSize, cn } from '@/lib/utils';
@@ -50,13 +54,21 @@ export const FileInfoPanel = ({
 }: FileInfoPanelProps) => {
   if (!file) return null;
 
-  const getFileIcon = (type: string) => {
+  const getFileIcon = (type: string, fileName: string = '') => {
+    const ext = fileName.split('.').pop()?.toLowerCase();
     const className = "w-20 h-20 text-primary mb-6";
     switch (type) {
       case 'Folder': return <Folder className="w-20 h-20 text-primary fill-primary/10 mb-6" />;
-      case 'Image': return <ImageIcon className={className} />;
+      case 'Image':
+        if (ext === 'svg' || ext === 'ai') return <ImageIcon className="w-20 h-20 text-emerald-500 mb-6" />;
+        if (ext === 'psd' || ext === 'raw') return <ImageIcon className="w-20 h-20 text-orange-500 mb-6" />;
+        return <ImageIcon className={className} />;
       case 'Video': return <Video className={className} />;
       case 'Audio': return <Music className={className} />;
+      case 'Archive': return <Archive className="w-20 h-20 text-amber-600 mb-6" />;
+      case 'System': return <Terminal className="w-20 h-20 text-slate-600 mb-6" />;
+      case 'Code': return <CodeIcon className="w-20 h-20 text-indigo-500 mb-6" />;
+      case 'Font': return <FontIcon className="w-20 h-20 text-cyan-600 mb-6" />;
       case 'Text': return <FileText className={className} />;
       case 'PDF': return <FileText className={className} />;
       default: return <File className={className} />;
@@ -99,7 +111,7 @@ export const FileInfoPanel = ({
                   <div className="relative group">
                      <div className="absolute inset-0 bg-primary/20 rounded-[2.5rem] blur-2xl group-hover:blur-3xl transition-all" />
                      <div className="relative bg-surface rounded-[2.5rem] p-10 border border-outline/5 shadow-inner">
-                        {getFileIcon(file.fileType)}
+                        {getFileIcon(file.fileType, file.fileName)}
                      </div>
                   </div>
                   <h4 className="text-title-large font-black text-on-surface mt-8 truncate w-full px-4" title={file.fileName}>

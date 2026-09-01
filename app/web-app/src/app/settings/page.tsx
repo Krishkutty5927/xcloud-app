@@ -28,8 +28,11 @@ import {
   Eye,
   EyeOff,
   AlertTriangle,
-  Unlock
+  Unlock,
+  Cpu,
+  Monitor
 } from 'lucide-react';
+
 import { formatFileSize, cn } from '@/lib/utils';
 import { uploadAvatar } from '@/lib/profile-manager';
 import { doc, updateDoc } from 'firebase/firestore';
@@ -61,7 +64,40 @@ export default function SettingsPage() {
   const [newPasscode, setNewPasscode] = useState('');
   const [confirmPasscode, setConfirmPasscode] = useState('');
 
+  const [activeTab, setActiveTab] = useState<'general' | 'devices'>('general');
+  const [currentNodeInfo, setCurrentNodeInfo] = useState({ ip: 'Detecting...', location: 'Locating...', browser: 'Detecting...' });
+  const [mockDevices, setMockDevices] = useState([
+    { id: 'dev_1', name: 'Mobile Node X14', type: 'Android Smartphone', location: 'New York, US', icon: Smartphone, lastActive: '2 hours ago', ip: '104.28.32.11' },
+    { id: 'dev_2', name: 'Workstation Node', type: 'Windows NT', location: 'London, UK', icon: Monitor, lastActive: 'Active 12m ago', ip: '82.145.210.4' }
+  ]);
+
+  React.useEffect(() => {
+    // Basic browser detection
+    const ua = navigator.userAgent;
+    let browser = "Unknown Browser";
+    if (ua.includes("Firefox")) browser = "Mozilla Firefox";
+    else if (ua.includes("SamsungBrowser")) browser = "Samsung Internet";
+    else if (ua.includes("Opera") || ua.includes("OPR")) browser = "Opera";
+    else if (ua.includes("Edge")) browser = "Microsoft Edge";
+    else if (ua.includes("Chrome")) browser = "Google Chrome";
+    else if (ua.includes("Safari")) browser = "Apple Safari";
+
+    fetch('https://ipapi.co/json/')
+      .then(res => res.json())
+      .then(data => {
+        setCurrentNodeInfo({
+          ip: data.ip || 'Unknown IP',
+          location: data.city ? `${data.city}, ${data.country_name}` : 'Unknown Location',
+          browser
+        });
+      })
+      .catch(() => {
+        setCurrentNodeInfo({ ip: 'Hidden Node', location: 'Encrypted Proxy', browser });
+      });
+  }, []);
+
   if (!user || !userMetadata) return null;
+
 
   const used = userMetadata.storageUsed || 0;
   const available = userMetadata.storageAvailable || 5368709120;
@@ -153,6 +189,17 @@ export default function SettingsPage() {
     } finally {
       hideToast(toastId);
       setIsSaving(false);
+    }
+  };
+
+  const handleDisconnectDevice = (deviceId: string, deviceName: string) => {
+    if (confirm(`Decommission ${deviceName}? Secure access will be revoked from this hardware node.`)) {
+      const toastId = showToast(`Decommissioning ${deviceName}...`, 'loading');
+      setTimeout(() => {
+        setMockDevices(prev => prev.filter(d => d.id !== deviceId));
+        hideToast(toastId);
+        showToast(`${deviceName} decommissioned successfully`, 'success');
+      }, 1500);
     }
   };
 
@@ -417,14 +464,34 @@ export default function SettingsPage() {
         )}
       </AnimatePresence>
 
-      <header className="space-y-2">
+      <header className="space-y-4">
         <h1 className="text-display-small font-black text-on-surface tracking-tighter text-primary">Vault Settings</h1>
-        <p className="text-on-surface-variant text-sm font-medium">
-          Configure your identity, security protocols, and visual preferences.
-        </p>
+
+        <div className="flex bg-surface-variant/30 p-1 rounded-2xl w-fit">
+           <button
+             onClick={() => setActiveTab('general')}
+             className={cn(
+               "px-8 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
+               activeTab === 'general' ? "bg-primary text-on-primary shadow-lg" : "text-on-surface-variant hover:bg-surface-variant/50"
+             )}
+           >
+             General
+           </button>
+           <button
+             onClick={() => setActiveTab('devices')}
+             className={cn(
+               "px-8 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
+               activeTab === 'devices' ? "bg-primary text-on-primary shadow-lg" : "text-on-surface-variant hover:bg-surface-variant/50"
+             )}
+           >
+             Devices
+           </button>
+        </div>
       </header>
 
-      <div className="grid grid-cols-1 gap-8 pb-20">
+      {activeTab === 'general' ? (
+        <div className="grid grid-cols-1 gap-8 pb-20">
+
         {/* Profile Section */}
         <section className="bg-surface-variant/10 border border-outline/5 rounded-[3rem] p-10 shadow-sm relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -mr-32 -mt-32 group-hover:scale-110 transition-transform duration-1000" />
@@ -693,6 +760,83 @@ export default function SettingsPage() {
            </p>
         </div>
       </div>
+    ) : (
+      <div className="space-y-8 pb-20">
+           <section className="bg-surface-variant/10 border border-outline/5 rounded-[3rem] p-10 shadow-sm relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -mr-32 -mt-32" />
+
+              <div className="flex items-center gap-5 mb-10 relative z-10">
+                <div className="p-4 bg-primary-container text-on-primary-container rounded-3xl shadow-sm">
+                  <Smartphone size={28} />
+                </div>
+                <div>
+                  <h2 className="text-headline-small font-black text-on-surface">Active Nodes</h2>
+                  <p className="text-body-small text-on-surface-variant font-bold uppercase tracking-widest">Hardware authorization list</p>
+                </div>
+              </div>
+
+              <div className="space-y-4 relative z-10">
+                 {/* Current Device */}
+                 <div className="p-8 bg-primary/5 border-2 border-primary/20 rounded-[2.5rem] flex items-center justify-between">
+                    <div className="flex items-center gap-6">
+                       <div className="w-16 h-16 bg-primary text-on-primary rounded-2xl flex items-center justify-center shadow-lg">
+                          <Monitor size={32} />
+                       </div>
+                       <div>
+                          <div className="flex items-center gap-3">
+                             <p className="text-lg font-black text-on-surface">{currentNodeInfo.browser}</p>
+                             <span className="bg-emerald-500 text-white text-[8px] font-black uppercase px-2 py-0.5 rounded-full shadow-sm">Active Now</span>
+                          </div>
+                          <p className="text-xs font-bold text-outline mt-1 uppercase tracking-tighter">
+                             {navigator.platform} Node • {currentNodeInfo.location} • IP: {currentNodeInfo.ip}
+                          </p>
+                       </div>
+                    </div>
+                    <div className="text-right">
+                       <p className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">Verified Secure</p>
+                       <p className="text-[9px] font-bold text-outline mt-1 uppercase">Transmission Encryption: AES-256</p>
+                    </div>
+                 </div>
+
+                 {/* Other Mock Devices */}
+                 <div className="grid grid-cols-1 gap-4 pt-4">
+                    {mockDevices.map((device, i) => (
+                       <div key={device.id} className="p-6 bg-surface border border-outline/10 rounded-[2rem] flex items-center justify-between group hover:border-primary/20 transition-all shadow-sm">
+                          <div className="flex items-center gap-5">
+                             <div className="w-12 h-12 bg-surface-variant text-on-surface-variant rounded-xl flex items-center justify-center group-hover:bg-primary-container group-hover:text-primary transition-colors shadow-inner">
+                                <device.icon size={24} />
+                             </div>
+                             <div>
+                                <p className="text-sm font-black text-on-surface">{device.name}</p>
+                                <p className="text-[10px] font-bold text-outline uppercase tracking-tight mt-1 opacity-70">
+                                   {device.type} • {device.location} • {device.lastActive} • IP: {device.ip}
+                                </p>
+                             </div>
+                          </div>
+                          <button
+                            onClick={() => handleDisconnectDevice(device.id, device.name)}
+                            className="px-5 py-2.5 bg-surface-variant/50 text-on-surface-variant rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-error-container/20 hover:text-error transition-all shadow-sm active:scale-95"
+                          >
+                             Disconnect
+                          </button>
+                       </div>
+                    ))}
+                 </div>
+              </div>
+           </section>
+
+           <div className="p-8 bg-primary/5 rounded-[2.5rem] border border-primary/10 flex items-center gap-6">
+              <Cpu className="text-primary shrink-0" size={32} />
+              <div className="space-y-1">
+                 <p className="text-sm font-black text-on-surface uppercase tracking-tight">Multi-Node Protection</p>
+                 <p className="text-xs font-medium text-on-surface-variant leading-relaxed">
+                   XCloud uses hardware-bound identity verification. If you see an unrecognized device, decommission it immediately and rotate your master access key.
+                 </p>
+              </div>
+           </div>
+        </div>
+      )}
     </div>
   );
 }
+

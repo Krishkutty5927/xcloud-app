@@ -4,6 +4,12 @@ import dev.gitlive.firebase.firestore.Timestamp
 import kotlinx.serialization.Serializable
 
 @Serializable
+data class Collaborator(
+    val email: String = "",
+    val role: String = "viewer"
+)
+
+@Serializable
 data class FileEntry(
     val fileId: String = "",
     val fileName: String = "",
@@ -24,5 +30,6 @@ data class FileEntry(
     val expiryTimestamp: Timestamp? = null,
     val lastOpenedTimestamp: Timestamp? = null,
     val isLocked: Boolean = false,
-    val sharedWithEmails: List<String> = emptyList()
+    val sharedWithEmails: List<String> = emptyList(),
+    val sharedWith: List<Collaborator>? = emptyList()
 )

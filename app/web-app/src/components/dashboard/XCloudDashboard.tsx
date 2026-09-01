@@ -16,7 +16,10 @@ import {
   ShieldCheck,
   Star,
   File,
-  Lock
+  Lock,
+  MoreHorizontal,
+  Ban,
+  Globe
 } from 'lucide-react';
 import { moveToTrash } from '@/lib/trash-manager';
 import { updateFileName, createFolder, updateLastOpened } from '@/lib/file-manager';
