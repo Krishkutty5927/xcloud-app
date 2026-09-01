@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.cloud.x.app.shared.ui.AuthScreen
 import com.cloud.x.app.shared.ui.DashboardScreen
@@ -88,9 +89,9 @@ val XCloudDarkColors = darkColorScheme(
 @Composable
 fun App(
     deepLink: String? = null,
-    onGoogleSignInClick: (coroutineScope: CoroutineScope, onIdTokenReceived: (String) -> Unit) -> Unit = { _, _ -> },
-    onFacebookSignInClick: (coroutineScope: CoroutineScope, onTokenReceived: (String) -> Unit) -> Unit = { _, _ -> },
-    onAppleSignInClick: (coroutineScope: CoroutineScope, onIdTokenReceived: (String, String) -> Unit) -> Unit = { _, _ -> },
+    onGoogleSignInClick: (coroutineScope: CoroutineScope, onIdTokenReceived: (String) -> Unit, onError: (String) -> Unit) -> Unit = { _, _, _ -> },
+    onFacebookSignInClick: (coroutineScope: CoroutineScope, onTokenReceived: (String) -> Unit, onError: (String) -> Unit) -> Unit = { _, _, _ -> },
+    onAppleSignInClick: (coroutineScope: CoroutineScope, onIdTokenReceived: (String, String) -> Unit, onError: (String) -> Unit) -> Unit = { _, _, _ -> },
     onSignOutClick: (coroutineScope: CoroutineScope, onComplete: () -> Unit) -> Unit = { _, onComplete -> onComplete() },
     onPickFileClick: (onFilePicked: (String, String, Long, ByteArray) -> Unit) -> Unit = { _ -> },
     onPickAvatarClick: (onAvatarPicked: (String, String, Long, ByteArray) -> Unit) -> Unit = { _ -> },
@@ -116,6 +117,7 @@ fun App(
     var isLocked by remember { mutableStateOf(false) }
     var hasAuthenticatedSession by remember { mutableStateOf(false) }
     var isInitializing by remember { mutableStateOf(true) }
+    var showSignOutConfirm by remember { mutableStateOf(false) }
     
     val scope = rememberCoroutineScope()
 
@@ -186,19 +188,25 @@ fun App(
                 AuthScreen(
                     viewModel = authViewModel,
                     onGoogleSignInClick = {
-                        onGoogleSignInClick(scope) { idToken ->
+                        onGoogleSignInClick(scope, { idToken ->
                             authViewModel.onGoogleSignInResult(idToken)
-                        }
+                        }, { error ->
+                            authViewModel.onSignInError(error)
+                        })
                     },
                     onFacebookSignInClick = {
-                        onFacebookSignInClick(scope) { accessToken ->
+                        onFacebookSignInClick(scope, { accessToken ->
                             authViewModel.onFacebookSignInResult(accessToken)
-                        }
+                        }, { error ->
+                            authViewModel.onSignInError(error)
+                        })
                     },
                     onAppleSignInClick = {
-                        onAppleSignInClick(scope) { idToken, nonce ->
+                        onAppleSignInClick(scope, { idToken, nonce ->
                             authViewModel.onAppleSignInResult(idToken, nonce)
-                        }
+                        }, { error ->
+                            authViewModel.onSignInError(error)
+                        })
                     }
                 )
             } else if (isLocked) {
@@ -253,11 +261,7 @@ fun App(
                     isDarkTheme = isDarkTheme,
                     onThemeToggle = { isDarkTheme = !isDarkTheme },
                     onSignOutClick = {
-                        onSignOutClick(scope) {
-                            scope.launch {
-                                authRepository.logout()
-                            }
-                        }
+                        showSignOutConfirm = true
                     },
                     onPickFileClick = onPickFileClick,
                     onPickAvatarClick = onPickAvatarClick,
@@ -266,6 +270,53 @@ fun App(
                     onBiometricAuthClick = onBiometricAuthClick
                 )
             }
+        }
+
+        if (showSignOutConfirm) {
+            AlertDialog(
+                onDismissRequest = { showSignOutConfirm = false },
+                title = { 
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Text("Terminate Session?", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
+                    }
+                },
+                text = { 
+                    Text(
+                        "You are about to disconnect from your secure vault. All active transfers will be suspended.",
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                confirmButton = {
+                    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Button(
+                            onClick = {
+                                showSignOutConfirm = false
+                                onSignOutClick(scope) {
+                                    scope.launch {
+                                        authRepository.logout()
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Text("Terminate Access", fontWeight = FontWeight.Black, color = Color.White)
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        TextButton(
+                            onClick = { showSignOutConfirm = false },
+                            modifier = Modifier.fillMaxWidth().height(56.dp)
+                        ) {
+                            Text("Maintain Connection", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                },
+                shape = RoundedCornerShape(32.dp),
+                containerColor = MaterialTheme.colorScheme.surface,
+                tonalElevation = 8.dp
+            )
         }
     }
 }

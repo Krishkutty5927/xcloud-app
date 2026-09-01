@@ -23,6 +23,8 @@ export default function AuthPage() {
   const [resetEmail, setResetEmail] = useState('');
 
   const handleSocialAuth = async (provider: any) => {
+    if (isLoading) return; // Prevent double-clicks which cancel popups
+
     setIsLoading(true);
     setError(null);
     try {
@@ -60,6 +62,17 @@ export default function AuthPage() {
         }
       }
     } catch (err: any) {
+      console.error("[AUTH] Social Login Error:", err);
+
+      if (err.code === 'auth/popup-closed-by-user') {
+        setIsLoading(false);
+        return;
+      }
+
+      if (err.code === 'auth/cancelled-popup-request') {
+        return; // Ignore as another attempt is starting
+      }
+
       setError(err.message);
       setIsLoading(false);
     }

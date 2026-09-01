@@ -18,7 +18,8 @@ import {
   CheckCircle2,
   X,
   Clock,
-  Globe
+  Globe,
+  Lock
 } from 'lucide-react';
 import { cn, formatFileSize } from '@/lib/utils';
 import { FileEntry } from '@/lib/upload-manager';
@@ -110,6 +111,17 @@ export const FileItem = memo(({
             <Globe size={10} />
             Shared
           </div>
+        </div>
+      )}
+
+      {file.isLocked && (
+        <div className={cn(
+          "absolute z-10 animate-in fade-in zoom-in duration-500",
+          viewMode === 'grid' ? "top-6 right-6" : "right-20"
+        )}>
+           <div className="bg-primary text-on-primary p-1.5 rounded-xl shadow-lg border border-white/10">
+              <Lock size={12} fill="currentColor" fillOpacity={0.2} />
+           </div>
         </div>
       )}
 

@@ -24,7 +24,11 @@ class CredentialManagerHelper(private val context: Context) {
     private val credentialManager = CredentialManager.create(context)
     private val tag = "CredManagerHelper"
 
-    fun launchGoogleSignIn(coroutineScope: CoroutineScope, onIdTokenReceived: (String) -> Unit) {
+    fun launchGoogleSignIn(
+        coroutineScope: CoroutineScope, 
+        onIdTokenReceived: (String) -> Unit,
+        onError: (String) -> Unit = {}
+    ) {
         Log.d(tag, "Launching Google Sign-In request...")
         
         val webClientId = context.getString(R.string.default_web_client_id)
@@ -52,7 +56,7 @@ class CredentialManagerHelper(private val context: Context) {
                 Log.d(tag, "Calling getCredential...")
                 val result = credentialManager.getCredential(context, request)
                 Log.d(tag, "getCredential success!")
-                handleSignIn(result, onIdTokenReceived)
+                handleSignIn(result, onIdTokenReceived, onError)
             } catch (e: GetCredentialException) {
                 val errorMsg = when (e.type) {
                     "android.credentials.GetCredentialException.TYPE_USER_CANCELED" -> "Sign-In cancelled"
@@ -63,9 +67,11 @@ class CredentialManagerHelper(private val context: Context) {
                 Log.e(tag, "GetCredentialException: Type=${e.type}, Message=${e.message}")
                 Log.e(tag, Log.getStackTraceString(e))
                 Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
+                onError(errorMsg)
             } catch (e: Exception) {
                 Log.e(tag, "Unknown error during sign in: ${e.message}", e)
                 Toast.makeText(context, "An unexpected error occurred", Toast.LENGTH_SHORT).show()
+                onError(e.message ?: "An unexpected error occurred")
             }
         }
     }
@@ -76,7 +82,11 @@ class CredentialManagerHelper(private val context: Context) {
         return Base64.encodeToString(randomBytes, Base64.NO_WRAP or Base64.URL_SAFE or Base64.NO_PADDING)
     }
 
-    private fun handleSignIn(result: GetCredentialResponse, onIdTokenReceived: (String) -> Unit) {
+    private fun handleSignIn(
+        result: GetCredentialResponse, 
+        onIdTokenReceived: (String) -> Unit,
+        onError: (String) -> Unit
+    ) {
         val credential = result.credential
         if ((credential is CustomCredential) && (credential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL)) {
             try {
@@ -85,10 +95,12 @@ class CredentialManagerHelper(private val context: Context) {
             } catch (e: Exception) {
                 Log.e(tag, "Error parsing Google ID token: ${e.message}")
                 Toast.makeText(context, "Error parsing login details", Toast.LENGTH_SHORT).show()
+                onError("Error parsing login details")
             }
         } else {
             Log.w(tag, "Credential is not of type Google ID!")
             Toast.makeText(context, "Unexpected login type", Toast.LENGTH_SHORT).show()
+            onError("Unexpected login type")
         }
     }
 

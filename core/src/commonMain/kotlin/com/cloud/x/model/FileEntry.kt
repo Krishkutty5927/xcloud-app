@@ -23,5 +23,6 @@ data class FileEntry(
     val passcode: String? = null,
     val expiryTimestamp: Timestamp? = null,
     val lastOpenedTimestamp: Timestamp? = null,
+    val isLocked: Boolean = false,
     val sharedWithEmails: List<String> = emptyList()
 )

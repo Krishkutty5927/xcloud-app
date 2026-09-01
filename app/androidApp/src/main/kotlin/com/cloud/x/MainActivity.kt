@@ -102,21 +102,21 @@ class MainActivity : FragmentActivity() {
                 SideEffect { isReady = true }
                 App(
                     deepLink = deepLinkUrl,
-                    onGoogleSignInClick = { scope, onToken ->
-                        credentialManagerHelper.launchGoogleSignIn(scope, onToken)
+                    onGoogleSignInClick = { scope, onToken, onError ->
+                        credentialManagerHelper.launchGoogleSignIn(scope, onToken, onError)
                     },
-                    onFacebookSignInClick = { _, onToken ->
+                    onFacebookSignInClick = { _, onToken, onError ->
                         facebookAuthHelper.registerCallback(
                             onSuccess = { onToken(it) },
-                            onCancelAction = { /* Handle cancel */ },
-                            onError = { /* Handle error */ }
+                            onCancelAction = { onError("Facebook Sign-In cancelled") },
+                            onError = { onError(it.message ?: "Facebook Sign-In failed") }
                         )
                         facebookAuthHelper.launchLogin()
                     },
-                    onAppleSignInClick = { _, onToken ->
+                    onAppleSignInClick = { _, onToken, onError ->
                         appleAuthHelper.launchLogin(
                             onSuccess = { idToken, nonce -> onToken(idToken, nonce) },
-                            onError = { /* Handle error */ }
+                            onError = { onError(it) }
                         )
                     },
                     onSignOutClick = { _, onComplete ->

@@ -4,8 +4,9 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Folder, Check, Loader2, Home } from 'lucide-react';
 import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs, doc, writeBatch } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc } from 'firebase/firestore';
 import { FileEntry } from '@/lib/upload-manager';
+import { moveFiles } from '@/lib/file-manager';
 import { useAuth } from '@/context/auth-context';
 import { useToast } from '@/context/toast-context';
 import { cn } from '@/lib/utils';
@@ -50,19 +51,15 @@ export const MoveToFolderModal = ({
   const handleMove = async () => {
     if (!user || selectedFileIds.length === 0) return;
     setIsMoving(true);
-    const toastId = showToast(`Relocating items...`, 'loading');
+    const toastId = showToast(`Relocating ${selectedFileIds.length} items...`, 'loading');
 
     try {
-      const batch = writeBatch(db);
-      selectedFileIds.forEach(id => {
-        const ref = doc(db, 'users', user.uid, 'user_files', id);
-        batch.update(ref, { parentId: targetFolderId });
-      });
-
-      await batch.commit();
+      await moveFiles(user.uid, selectedFileIds, targetFolderId);
+      hideToast(toastId);
       showToast('Items relocated successfully', 'success');
       onClose();
     } catch (error: any) {
+      hideToast(toastId);
       showToast(error.message, 'error');
     } finally {
       setIsMoving(false);

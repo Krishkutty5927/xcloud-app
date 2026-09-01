@@ -1,5 +1,6 @@
-import { doc, updateDoc, setDoc, getDoc, increment, serverTimestamp } from "firebase/firestore";
+import { doc, updateDoc, setDoc, getDoc, increment, serverTimestamp, writeBatch, collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "./firebase";
+import { FileEntry } from "./upload-manager";
 
 /**
  * Recursively updates the size of parent folders.
@@ -25,6 +26,45 @@ export const updateParentFolderSizes = async (userId: string, parentId: string, 
   } catch (err) {
     console.error("[SYS] Folder size sync failed:", err);
   }
+};
+
+/**
+ * Move multiple files/folders to a new target folder.
+ * Updates the parent sizes for both source and destination folders.
+ */
+export const moveFiles = async (userId: string, fileIds: string[], targetFolderId: string) => {
+  const batch = writeBatch(db);
+
+  // 1. Fetch metadata for all items to be moved to know their sizes and current parents
+  const itemsToMove: FileEntry[] = [];
+  for (const id of fileIds) {
+    const ref = doc(db, 'users', userId, 'user_files', id);
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      itemsToMove.push(snap.data() as FileEntry);
+    }
+  }
+
+  // 2. Perform the move and schedule size updates
+  for (const item of itemsToMove) {
+    if (item.parentId === targetFolderId) continue; // Skip if already there
+
+    const ref = doc(db, 'users', userId, 'user_files', item.fileId);
+    batch.update(ref, { parentId: targetFolderId });
+
+    // Handle Folder Size Re-sync
+    // Subtract from old parent tree
+    if (item.parentId && item.parentId !== 'root') {
+        await updateParentFolderSizes(userId, item.parentId, -item.fileSize);
+    }
+
+    // Add to new parent tree
+    if (targetFolderId !== 'root') {
+        await updateParentFolderSizes(userId, targetFolderId, item.fileSize);
+    }
+  }
+
+  await batch.commit();
 };
 
 /**
@@ -62,4 +102,18 @@ export const createFolder = async (userId: string, folderName: string, parentId:
   });
 
   return folderId;
+};
+
+/**
+ * Updates the last opened timestamp for a file.
+ */
+export const updateLastOpened = async (userId: string, fileId: string) => {
+  try {
+    const fileRef = doc(db, 'users', userId, 'user_files', fileId);
+    await updateDoc(fileRef, {
+      lastOpenedTimestamp: serverTimestamp()
+    });
+  } catch (err) {
+    console.error("[SYS] Last opened update failed:", err);
+  }
 };

@@ -28,7 +28,7 @@ import {
   Eye,
   EyeOff,
   AlertTriangle,
-  Fingerprint
+  Unlock
 } from 'lucide-react';
 import { formatFileSize, cn } from '@/lib/utils';
 import { uploadAvatar } from '@/lib/profile-manager';
@@ -55,6 +55,11 @@ export default function SettingsPage() {
 
   const [isSaving, setIsSaving] = useState(false);
   const avatarInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Passcode Setup State
+  const [isPasscodeSetupOpen, setIsPasscodeSetupOpen] = useState(false);
+  const [newPasscode, setNewPasscode] = useState('');
+  const [confirmPasscode, setConfirmPasscode] = useState('');
 
   if (!user || !userMetadata) return null;
 
@@ -151,22 +156,33 @@ export default function SettingsPage() {
     }
   };
 
-  const handleToggleBiometric = async (id: string, currentlyEnabled: boolean) => {
-    if (!currentlyEnabled) {
-      // Trigger WebAuthn simulated prompt for "Enabling"
-      const toastId = showToast('Authenticating with WebAuthn...', 'loading');
-      try {
-        // In a real app, this would use navigator.credentials.create()
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        await updatePreference(id, true);
-        showToast('Biometric identity registered successfully', 'success');
-      } catch (error: any) {
-        showToast('WebAuthn registration failed', 'error');
-      } finally {
-        hideToast(toastId);
-      }
-    } else {
-      await updatePreference(id, false);
+  const handleSavePasscode = async () => {
+    if (newPasscode.length < 6 || newPasscode.length > 15 || !/^\d+$/.test(newPasscode)) {
+      showToast('Passcode must be 6-15 digits', 'error');
+      return;
+    }
+    if (newPasscode !== confirmPasscode) {
+      showToast('Passcodes do not match', 'error');
+      return;
+    }
+
+    setIsSaving(true);
+    const toastId = showToast('Configuring vault lock...', 'loading');
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, {
+        'preferences.security.passcode': newPasscode,
+        'preferences.security.passcodeEnabled': true
+      });
+      showToast('Passcode lock enabled', 'success');
+      setIsPasscodeSetupOpen(false);
+      setNewPasscode('');
+      setConfirmPasscode('');
+    } catch (error: any) {
+      showToast(error.message, 'error');
+    } finally {
+      hideToast(toastId);
+      setIsSaving(false);
     }
   };
 
@@ -341,6 +357,66 @@ export default function SettingsPage() {
         )}
       </AnimatePresence>
 
+      {/* Passcode Setup Modal */}
+      <AnimatePresence>
+        {isPasscodeSetupOpen && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsPasscodeSetupOpen(false)} className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-sm bg-surface rounded-[2.5rem] p-8 shadow-2xl border border-outline/10">
+              <div className="flex justify-between items-center mb-8">
+                <div className="flex items-center gap-3">
+                   <div className="p-2 bg-primary-container text-on-primary-container rounded-xl">
+                      <Lock size={20} />
+                   </div>
+                   <h3 className="text-xl font-black text-on-surface">Setup Passcode</h3>
+                </div>
+                <button onClick={() => setIsPasscodeSetupOpen(false)} className="p-2 hover:bg-surface-variant rounded-full text-on-surface-variant"><X size={20} /></button>
+              </div>
+
+              <div className="space-y-6">
+                <p className="text-xs text-on-surface-variant font-medium leading-relaxed">Enter a 6-15 digit number to secure your vault. You'll need this every time you open XCloud.</p>
+
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-primary uppercase tracking-[0.2em] px-1">New Passcode</label>
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={newPasscode}
+                      onChange={(e) => setNewPasscode(e.target.value.replace(/\D/g, '').slice(0, 15))}
+                      placeholder="6-15 digits"
+                      className="w-full px-5 py-4 bg-surface-variant/30 border border-outline/10 rounded-2xl outline-none focus:ring-2 focus:ring-primary focus:bg-surface transition-all text-on-surface font-black tracking-[0.5em] text-center"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-primary uppercase tracking-[0.2em] px-1">Confirm Passcode</label>
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={confirmPasscode}
+                      onChange={(e) => setConfirmPasscode(e.target.value.replace(/\D/g, '').slice(0, 15))}
+                      placeholder="Verify digits"
+                      className="w-full px-5 py-4 bg-surface-variant/30 border border-outline/10 rounded-2xl outline-none focus:ring-2 focus:ring-primary focus:bg-surface transition-all text-on-surface font-black tracking-[0.5em] text-center"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleSavePasscode}
+                  disabled={isSaving}
+                  className="w-full py-5 bg-primary text-on-primary font-black rounded-3xl hover:shadow-2xl shadow-primary/20 transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50"
+                >
+                  {isSaving ? <Loader2 className="animate-spin" size={20} /> : "Enable Vault Lock"}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <header className="space-y-2">
         <h1 className="text-display-small font-black text-on-surface tracking-tighter text-primary">Vault Settings</h1>
         <p className="text-on-surface-variant text-sm font-medium">
@@ -503,7 +579,21 @@ export default function SettingsPage() {
               </div>
               <div className="space-y-3">
                 {[
-                  { id: 'security.twoFactorEnabled', label: 'Biometric Access', icon: Fingerprint, enabled: userMetadata.preferences?.security?.twoFactorEnabled, description: 'Secure vault with FaceID or Fingerprint', type: 'toggle' },
+                  {
+                    id: 'security.passcodeEnabled',
+                    label: 'Passcode Lock',
+                    icon: userMetadata.preferences?.security?.passcodeEnabled ? Lock : Unlock,
+                    enabled: userMetadata.preferences?.security?.passcodeEnabled,
+                    description: '6-15 digit secure vault access',
+                    type: 'action',
+                    onClick: () => {
+                      if (userMetadata.preferences?.security?.passcodeEnabled) {
+                        updatePreference('security.passcodeEnabled', false);
+                      } else {
+                        setIsPasscodeSetupOpen(true);
+                      }
+                    }
+                  },
                   { id: 'security.loginAlerts', label: 'Access Alerts', icon: Shield, enabled: userMetadata.preferences?.security?.loginAlerts, description: 'Notify on unauthorized access', type: 'toggle' },
                   { id: 'notifications.emailAlerts', label: 'Email Security', icon: Mail, enabled: userMetadata.preferences?.notifications?.emailAlerts, description: 'Security updates via email', type: 'toggle' },
                   { id: 'notifications.pushToasts', label: 'Live Feedback', icon: Bell, enabled: userMetadata.preferences?.notifications?.pushToasts, description: 'Real-time interface notifications', type: 'toggle' },

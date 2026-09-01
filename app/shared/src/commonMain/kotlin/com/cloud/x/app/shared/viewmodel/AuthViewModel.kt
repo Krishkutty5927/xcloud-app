@@ -48,6 +48,10 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
         }
     }
 
+    fun onSignInError(message: String) {
+        _authState.value = AuthState.Error(message)
+    }
+
     fun onFacebookSignInResult(accessToken: String) {
         _authState.value = AuthState.Loading
         viewModelScope.launch {

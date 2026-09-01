@@ -6,6 +6,7 @@ import com.cloud.x.util.FileUploadManager
 import com.cloud.x.util.SupabaseManager
 import com.cloud.x.util.currentTimeMillis
 import com.cloud.x.util.MetadataManager
+import com.cloud.x.util.sanitizeFileName
 import dev.gitlive.firebase.Firebase
 import dev.gitlive.firebase.firestore.FieldValue
 import dev.gitlive.firebase.firestore.firestore
@@ -150,9 +151,9 @@ class FileRepository {
                 return@flow
             }
             
-            // 1. Project Global Limit (50MB)
-            if (size > 50 * 1024 * 1024) {
-                emit(FileUploadManager.UploadStatus.Error(name, "File exceeds the 50MB project limit."))
+            // 1. Project Global Limit (450MB)
+            if (size > 450 * 1024 * 1024) {
+                emit(FileUploadManager.UploadStatus.Error(name, "File exceeds the 450MB project limit."))
                 return@flow
             }
 
@@ -164,9 +165,10 @@ class FileRepository {
 
             val fileId = "file_${currentTimeMillis()}_${(0..999).random()}"
             val category = categorizeMimeType(mimeType)
+            val cleanName = name.sanitizeFileName()
             
             // Align with web app pathing: userId/fileId-fileName
-            val storagePath = "$userId/$fileId-$name"
+            val storagePath = "$userId/$fileId-$cleanName"
             val bucket = supabase.storage["files"]
 
             // 3. Upload to Supabase

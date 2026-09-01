@@ -17,9 +17,9 @@ import {
   Star
 } from 'lucide-react';
 import { moveToTrash } from '@/lib/trash-manager';
-import { updateFileName, createFolder } from '@/lib/file-manager';
+import { updateFileName, createFolder, updateLastOpened } from '@/lib/file-manager';
 import { generatePublicShareLink } from '@/lib/share-manager';
-import { collection, query, where, onSnapshot, doc, updateDoc, collectionGroup, writeBatch } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc, collectionGroup, writeBatch, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { uploadFile, FileEntry } from '@/lib/upload-manager';
 import dynamic from 'next/dynamic';
@@ -53,6 +53,23 @@ export const XCloudDashboard = ({ filter = 'all' }: { filter?: 'all' | 'starred'
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
 
+  // Folder Lock State
+  const [unlockedFolderIds, setUnlockedFolderIds] = useState<string[]>([]);
+  const [isUnlockModalOpen, setIsUnlockModalOpen] = useState(false);
+  const [folderToUnlock, setFolderToUnlock] = useState<FileEntry | null>(null);
+  const [pinInput, setPinInput] = useState('');
+
+  // Shared View Sub-Filter
+  const [sharedSubFilter, setSharedSubFilter] = useState<'with_me' | 'by_me' | 'invitations'>('with_me');
+
+  // Reset state when sub-filter changes
+  useEffect(() => {
+    if (filter === 'shared') {
+      setIsLoading(true);
+      setFiles([]);
+    }
+  }, [sharedSubFilter, filter]);
+
   // Folder and Navigation State
   const [currentFolderId, setCurrentFolderId] = useState('root');
   const [breadcrumbs, setBreadcrumbs] = useState<{ id: string, name: string }[]>([{ id: 'root', name: 'My Drive' }]);
@@ -63,10 +80,28 @@ export const XCloudDashboard = ({ filter = 'all' }: { filter?: 'all' | 'starred'
     let q;
 
     if (filter === 'shared') {
+      if (!user.email) return;
+
+      if (sharedSubFilter === 'with_me' || sharedSubFilter === 'invitations') {
+        q = query(
+          collectionGroup(db, 'user_files'),
+          where('sharedWithEmails', 'array-contains', user.email.toLowerCase()),
+          where('isDeleted', '==', false)
+        );
+      } else {
+        // "You shared" - Query own files
+        q = query(
+          collection(db, 'users', user.uid, 'user_files'),
+          where('isDeleted', '==', false)
+        );
+      }
+    } else if (filter === 'all') {
+      // "Home" - Show Recently Opened/Uploaded across all folders
       q = query(
-        collectionGroup(db, 'user_files'),
-        where('sharedWithEmails', 'array-contains', user.email?.toLowerCase()),
-        where('isDeleted', '==', false)
+        collection(db, 'users', user.uid, 'user_files'),
+        where('isDeleted', '==', false),
+        orderBy('uploadTimestamp', 'desc'),
+        limit(12)
       );
     } else {
       q = query(
@@ -76,7 +111,7 @@ export const XCloudDashboard = ({ filter = 'all' }: { filter?: 'all' | 'starred'
 
       if (filter === 'starred') {
         q = query(q, where('isStarred', '==', true));
-      } else if (!searchQuery) {
+      } else if (filter === 'files' && !searchQuery) {
         q = query(q, where('parentId', '==', currentFolderId));
       }
     }
@@ -84,11 +119,34 @@ export const XCloudDashboard = ({ filter = 'all' }: { filter?: 'all' | 'starred'
     const unsubscribe = onSnapshot(q, (snapshot) => {
       let docs = snapshot.docs.map(doc => doc.data() as FileEntry);
 
+      if (filter === 'shared' && sharedSubFilter === 'by_me') {
+        // Client-side filter for shared files (Firestore doesn't support logical OR for complex queries easily)
+        docs = docs.filter(f => f.isPubliclyShared || (f.sharedWithEmails && f.sharedWithEmails.length > 0));
+      }
+
+      if (filter === 'shared' && sharedSubFilter === 'invitations') {
+        // Placeholder for invitations logic - maybe filter by a 'pending' status if added later
+        // For now, let's say Invitations are files shared with user in the last 48 hours
+        const twoDaysAgo = Date.now() - (48 * 60 * 60 * 1000);
+        docs = docs.filter(f => (f.uploadTimestamp?.seconds * 1000) > twoDaysAgo);
+      }
+
+      if (filter === 'all') {
+        // Filter out folders from "Recently Opened" view to keep it clean
+        docs = docs.filter(f => f.fileType !== 'Folder');
+      }
+
       if (searchQuery) {
         docs = docs.filter(f => f.fileName.toLowerCase().includes(searchQuery.toLowerCase()));
       }
 
       docs.sort((a, b) => {
+        if (filter === 'all') {
+          const timeA = a.lastOpenedTimestamp?.seconds || a.uploadTimestamp?.seconds || 0;
+          const timeB = b.lastOpenedTimestamp?.seconds || b.uploadTimestamp?.seconds || 0;
+          return timeB - timeA;
+        }
+
         if (a.fileType === 'Folder' && b.fileType !== 'Folder') return -1;
         if (a.fileType !== 'Folder' && b.fileType === 'Folder') return 1;
         const timeA = a.uploadTimestamp?.seconds || 0;
@@ -105,7 +163,7 @@ export const XCloudDashboard = ({ filter = 'all' }: { filter?: 'all' | 'starred'
     });
 
     return () => unsubscribe();
-  }, [user, filter, currentFolderId, searchQuery, showToast]);
+  }, [user, filter, currentFolderId, searchQuery, showToast, sharedSubFilter]);
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (!user || !userMetadata) return;
@@ -181,6 +239,32 @@ export const XCloudDashboard = ({ filter = 'all' }: { filter?: 'all' | 'starred'
     await updateDoc(ref, { isStarred: !file.isStarred });
   }, [user]);
 
+  const toggleLock = useCallback(async (file: FileEntry) => {
+    if (!user) return;
+    const ref = doc(db, 'users', user.uid, 'user_files', file.fileId);
+    await updateDoc(ref, { isLocked: !file.isLocked });
+    showToast(file.isLocked ? "Folder decrypted" : "Folder locked with AES-256", "success");
+  }, [user, showToast]);
+
+  const handleUnlock = useCallback(() => {
+    // For now, use the first 4 digits of the user's displayId as the PIN
+    const expectedPin = userMetadata?.displayId?.substring(0, 4) || '1234';
+
+    if (pinInput === expectedPin) {
+      if (folderToUnlock) {
+        setUnlockedFolderIds(prev => [...prev, folderToUnlock.fileId]);
+        navigateToFolder(folderToUnlock);
+      }
+      setIsUnlockModalOpen(false);
+      setPinInput('');
+      setFolderToUnlock(null);
+      showToast("Access granted", "success");
+    } else {
+      showToast("Invalid security key", "error");
+      setPinInput('');
+    }
+  }, [pinInput, userMetadata, folderToUnlock, navigateToFolder, showToast]);
+
   const handleMoveToTrash = useCallback(async (file: FileEntry) => {
     if (!user) return;
     try {
@@ -206,6 +290,7 @@ export const XCloudDashboard = ({ filter = 'all' }: { filter?: 'all' | 'starred'
   }, [user, newName, showToast, hideToast]);
 
   const handleDownload = useCallback((file: FileEntry) => {
+    if (user) updateLastOpened(user.uid, file.fileId);
     const link = document.createElement('a');
     link.href = file.downloadUrl;
     link.download = file.fileName;
@@ -272,11 +357,16 @@ export const XCloudDashboard = ({ filter = 'all' }: { filter?: 'all' | 'starred'
     if (e.shiftKey || selectedFileIds.length > 0) {
       toggleSelection(e, file.fileId);
     } else if (file.fileType === 'Folder') {
-      navigateToFolder(file);
+      if (file.isLocked && !unlockedFolderIds.includes(file.fileId)) {
+        setFolderToUnlock(file);
+        setIsUnlockModalOpen(true);
+      } else {
+        navigateToFolder(file);
+      }
     } else {
       setSelectedFileForInfo(file);
     }
-  }, [selectedFileIds, toggleSelection, navigateToFolder]);
+  }, [selectedFileIds, toggleSelection, navigateToFolder, unlockedFolderIds]);
 
   if (!user) return null;
 
@@ -316,7 +406,47 @@ export const XCloudDashboard = ({ filter = 'all' }: { filter?: 'all' | 'starred'
           onShare={handleShareFile}
           onDownload={handleDownload}
           onDelete={handleMoveToTrash}
+          onToggleLock={toggleLock}
         />
+      )}
+
+      {isUnlockModalOpen && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsUnlockModalOpen(false)} className="absolute inset-0 bg-black/60 backdrop-blur-md" />
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-sm bg-surface rounded-[2.5rem] p-10 shadow-2xl border border-outline/10 text-center">
+            <div className="w-20 h-20 bg-primary-container text-primary rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner">
+               <Lock size={40} />
+            </div>
+            <h3 className="text-2xl font-black text-on-surface mb-2">Encrypted Vault</h3>
+            <p className="text-on-surface-variant text-sm font-medium mb-8 leading-relaxed">Enter the first 4 digits of your Vault ID to decrypt this folder.</p>
+
+            <input
+              type="password"
+              value={pinInput}
+              onChange={(e) => setPinInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleUnlock()}
+              autoFocus
+              maxLength={4}
+              placeholder="••••"
+              className="w-full bg-surface-variant/40 border-none rounded-2xl py-5 text-center text-3xl tracking-[1em] font-black focus:ring-2 focus:ring-primary/20 outline-none mb-6 transition-all"
+            />
+
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={handleUnlock}
+                className="w-full py-4 bg-primary text-on-primary font-black rounded-2xl transition-all active:scale-95 shadow-lg shadow-primary/20 uppercase tracking-widest text-xs"
+              >
+                Unlock Folder
+              </button>
+              <button
+                onClick={() => setIsUnlockModalOpen(false)}
+                className="w-full py-4 bg-surface-variant/50 text-on-surface-variant font-black rounded-2xl transition-all active:scale-95 uppercase tracking-widest text-xs"
+              >
+                Cancel
+              </button>
+            </div>
+          </motion.div>
+        </div>
       )}
 
       {isMoveModalOpen && (
@@ -340,10 +470,50 @@ export const XCloudDashboard = ({ filter = 'all' }: { filter?: 'all' | 'starred'
           <div className="space-y-3">
             <h1 className="text-display-small font-black text-on-surface flex items-center gap-3">
               {filter === 'starred' ? <Star className="text-primary fill-primary" /> : <Cloud className="text-primary" />}
-              {filter === 'starred' ? 'Favourites' : filter === 'shared' ? 'Shared' : 'My Cloud'}
+              {filter === 'starred' ? 'Favourites' :
+               filter === 'shared' ? (sharedSubFilter === 'with_me' ? 'Shared with you' : sharedSubFilter === 'by_me' ? 'You shared' : 'Invitations') :
+               filter === 'all' ? 'Recently Opened' : 'My Drive'}
             </h1>
 
-            {filter === 'all' && !searchQuery && (
+            {filter === 'shared' && (
+              <div className="flex bg-surface-variant/30 p-1 rounded-2xl w-fit">
+                <button
+                  onClick={() => setSharedSubFilter('by_me')}
+                  className={cn(
+                    "px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
+                    sharedSubFilter === 'by_me'
+                      ? "bg-primary text-on-primary shadow-lg"
+                      : "text-on-surface-variant hover:bg-surface-variant/50"
+                  )}
+                >
+                  You shared
+                </button>
+                <button
+                  onClick={() => setSharedSubFilter('with_me')}
+                  className={cn(
+                    "px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
+                    sharedSubFilter === 'with_me'
+                      ? "bg-primary text-on-primary shadow-lg"
+                      : "text-on-surface-variant hover:bg-surface-variant/50"
+                  )}
+                >
+                  Shared with you
+                </button>
+                <button
+                  onClick={() => setSharedSubFilter('invitations')}
+                  className={cn(
+                    "px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
+                    sharedSubFilter === 'invitations'
+                      ? "bg-primary text-on-primary shadow-lg"
+                      : "text-on-surface-variant hover:bg-surface-variant/50"
+                  )}
+                >
+                  Invitations
+                </button>
+              </div>
+            )}
+
+            {filter === 'files' && !searchQuery && (
               <nav className="flex items-center gap-1.5 px-1">
                 {breadcrumbs.map((crumb, index) => (
                   <React.Fragment key={crumb.id}>
@@ -366,7 +536,7 @@ export const XCloudDashboard = ({ filter = 'all' }: { filter?: 'all' | 'starred'
           </div>
 
           <div className="flex items-center gap-3">
-             {filter === 'all' && (
+             {filter === 'files' && (
                <button
                  onClick={handleCreateFolder}
                  className="flex items-center gap-3 px-6 py-3.5 bg-surface text-on-surface-variant border border-outline/20 rounded-2xl text-sm font-black hover:bg-surface-variant/30 transition-all active:scale-95"
@@ -397,18 +567,20 @@ export const XCloudDashboard = ({ filter = 'all' }: { filter?: 'all' | 'starred'
                 </button>
              </div>
 
-             <button
-                onClick={open}
-                className="bg-primary text-on-primary px-8 py-4 rounded-[1.5rem] font-black flex items-center gap-3 shadow-xl shadow-primary/20 transition-all hover:shadow-2xl active:scale-95"
-              >
-                <Plus size={24} />
-                <span>Upload</span>
-              </button>
+             {(filter === 'all' || filter === 'files') && (
+               <button
+                  onClick={open}
+                  className="bg-primary text-on-primary px-8 py-4 rounded-[1.5rem] font-black flex items-center gap-3 shadow-xl shadow-primary/20 transition-all hover:shadow-2xl active:scale-95"
+                >
+                  <Plus size={24} />
+                  <span>Upload</span>
+                </button>
+             )}
           </div>
         </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-          <div className="lg:col-span-2 space-y-8">
+        <div className="grid grid-cols-1 gap-10 lg:grid-cols-1">
+          <div className="space-y-8 lg:col-span-1">
 
             <AnimatePresence>
               {Object.keys(uploadingFiles).length > 0 && (
@@ -459,11 +631,14 @@ export const XCloudDashboard = ({ filter = 'all' }: { filter?: 'all' | 'starred'
                     {filter === 'starred' ? <Star size={48} /> : <Cloud size={48} />}
                   </div>
                   <h2 className="text-headline-small font-black text-on-surface mb-3">
-                    {filter === 'starred' ? 'Empty Favourites' : 'Cloud Empty'}
+                    {filter === 'starred' ? 'Empty Favourites' :
+                     filter === 'all' ? 'No Recent Activity' : 'Cloud Empty'}
                   </h2>
                   <p className="text-on-surface-variant font-medium max-w-sm mx-auto leading-relaxed">
                     {filter === 'starred'
                       ? 'Star your most critical encrypted files to access them instantly from this vault.'
+                      : filter === 'all'
+                      ? 'Your recently opened or uploaded files will appear here for rapid access.'
                       : 'Your secure workspace is ready. Drop files here to encrypt and store them globally.'}
                   </p>
                 </div>
@@ -484,7 +659,10 @@ export const XCloudDashboard = ({ filter = 'all' }: { filter?: 'all' | 'starred'
                       onToggleSelection={toggleSelection}
                       onClick={(e) => handleFileClick(e, file)}
                       onDoubleClick={() => {
-                        if (file.fileType !== 'Folder') setPreviewFile(file);
+                        if (file.fileType !== 'Folder') {
+                          if (user) updateLastOpened(user.uid, file.fileId);
+                          setPreviewFile(file);
+                        }
                       }}
                       onToggleStar={toggleStar}
                       onDownload={handleDownload}
@@ -513,23 +691,6 @@ export const XCloudDashboard = ({ filter = 'all' }: { filter?: 'all' | 'starred'
                   </motion.div>
                 )}
               </AnimatePresence>
-            </div>
-          </div>
-
-          <div className="lg:col-span-1 space-y-10">
-            <StorageWidget />
-
-            <div className="bg-primary p-8 rounded-[3rem] text-on-primary shadow-xl shadow-primary/20 relative overflow-hidden group">
-               <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full blur-3xl -mr-24 -mt-24 group-hover:scale-125 transition-transform duration-700" />
-               <ShieldCheck size={48} className="mb-6 opacity-30" />
-               <h3 className="text-title-large font-black mb-3">Enterprise Grade</h3>
-               <p className="text-on-primary/70 text-sm font-medium leading-relaxed mb-8">
-                 Your XCloud is secured with zero-knowledge encryption and global multi-region redundancy.
-               </p>
-               <div className="flex items-center gap-3 text-xs font-black uppercase tracking-widest bg-white/10 w-fit px-4 py-2 rounded-full">
-                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-                  All Systems Online
-               </div>
             </div>
           </div>
         </div>

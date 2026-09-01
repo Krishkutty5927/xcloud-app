@@ -19,7 +19,8 @@ import {
   Users,
   Globe,
   Info,
-  Shield
+  Shield,
+  Unlock
 } from 'lucide-react';
 import { FileEntry } from '@/lib/upload-manager';
 import { formatFileSize, cn } from '@/lib/utils';
@@ -33,6 +34,7 @@ interface FileInfoPanelProps {
   onShare: (file: FileEntry) => void;
   onDownload: (file: FileEntry) => void;
   onDelete: (file: FileEntry) => void;
+  onToggleLock: (file: FileEntry) => void;
 }
 
 export const FileInfoPanel = ({
@@ -42,7 +44,8 @@ export const FileInfoPanel = ({
   onRename,
   onShare,
   onDownload,
-  onDelete
+  onDelete,
+  onToggleLock
 }: FileInfoPanelProps) => {
   if (!file) return null;
 
@@ -105,25 +108,26 @@ export const FileInfoPanel = ({
                </div>
 
                {/* M3 Tonal Actions */}
-               <div className="grid grid-cols-4 gap-3 px-8 py-6 border-y border-outline/5">
+               <div className="grid grid-cols-5 gap-2 px-6 py-6 border-y border-outline/5">
                   {[
                     { icon: Download, label: 'Get', action: () => onDownload(file), color: 'primary' },
                     { icon: Share2, label: 'Link', action: () => onShare(file), color: 'primary' },
                     { icon: Edit2, label: 'Edit', action: () => onRename(file), color: 'primary' },
+                    { icon: file.isLocked ? Unlock : Lock, label: file.isLocked ? 'Open' : 'Lock', action: () => onToggleLock(file), color: 'primary' },
                     { icon: Trash2, label: 'Bin', action: () => onDelete(file), color: 'error' }
                   ].map((btn, i) => (
                     <button
                       key={i}
                       onClick={btn.action}
                       className={cn(
-                        "flex flex-col items-center gap-2 p-3 rounded-2xl transition-all active:scale-90",
+                        "flex flex-col items-center gap-2 p-2 rounded-2xl transition-all active:scale-90",
                         btn.color === 'error'
                           ? "bg-error-container/20 text-error hover:bg-error-container/40"
                           : "bg-primary-container/20 text-primary hover:bg-primary-container/40"
                       )}
                     >
-                       <btn.icon size={20} />
-                       <span className="text-[10px] font-black uppercase tracking-tighter">{btn.label}</span>
+                       <btn.icon size={18} />
+                       <span className="text-[9px] font-black uppercase tracking-tighter">{btn.label}</span>
                     </button>
                   ))}
                </div>

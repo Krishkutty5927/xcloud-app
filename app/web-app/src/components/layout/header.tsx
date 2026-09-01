@@ -19,6 +19,7 @@ export const Header = () => {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showThemeMenu, setShowThemeMenu] = useState(false);
+  const [showSignOutModal, setShowSignOutModal] = useState(false);
   const [activities, setActivities] = useState<Activity[]>([]);
   const router = useRouter();
 
@@ -246,7 +247,7 @@ export const Header = () => {
                 </div>
                 <div className="mt-2 pt-2 border-t border-outline/5">
                   <button
-                    onClick={() => { logout(); setShowProfileMenu(false); }}
+                    onClick={() => { setShowSignOutModal(true); setShowProfileMenu(false); }}
                     className="w-full flex items-center gap-4 px-5 py-3.5 text-sm font-bold text-on-surface-variant hover:bg-surface-variant/50 rounded-2xl transition-all"
                   >
                     <LogOut size={20} className="text-outline" />
@@ -258,6 +259,53 @@ export const Header = () => {
           )}
         </div>
       </div>
+
+      {/* Sign Out Confirmation Modal */}
+      <AnimatePresence>
+        {showSignOutModal && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowSignOutModal(false)}
+              className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative w-full max-w-sm bg-surface rounded-[2.5rem] p-8 shadow-2xl transition-colors border border-outline/10"
+            >
+              <div className="text-center space-y-6">
+                <div className="w-20 h-20 bg-error-container text-error rounded-3xl flex items-center justify-center mx-auto shadow-inner">
+                  <LogOut size={40} />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-black text-on-surface tracking-tighter">Terminate Session?</h3>
+                  <p className="text-on-surface-variant font-medium text-sm mt-2 leading-relaxed">
+                    You are about to disconnect from your secure vault. All active transfers will be suspended.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-3">
+                  <button
+                    onClick={() => { logout(); setShowSignOutModal(false); }}
+                    className="w-full py-4 bg-error text-on-error font-black rounded-2xl hover:bg-error/90 shadow-lg shadow-error/20 transition-all active:scale-95 uppercase tracking-widest text-xs"
+                  >
+                    Terminate Access
+                  </button>
+                  <button
+                    onClick={() => setShowSignOutModal(false)}
+                    className="w-full py-4 bg-surface-variant text-on-surface-variant font-black rounded-2xl hover:bg-surface-variant/70 transition-all active:scale-95 uppercase tracking-widest text-xs"
+                  >
+                    Maintain Connection
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </header>
   );
 };

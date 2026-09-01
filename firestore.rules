@@ -3,10 +3,47 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Strict User Isolation
-    // Only the authenticated owner can access their profile and all nested data
-    match /users/{userId}/{allPaths=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isSharedWithMe() {
+      return isAuthenticated() &&
+             request.auth.token.email.lower() in resource.data.sharedWithEmails;
+    }
+
+    function isPublic() {
+      return resource.data.isPublic == true ||
+             resource.data.isPubliclyShared == true;
+    }
+
+    // Private User Data (Profile, Activities, Trash)
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      match /activities/{activityId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /trash_files/{fileId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // File Access (Direct path)
+    match /users/{userId}/user_files/{fileId} {
+      allow read: if isOwner(userId) || isSharedWithMe() || isPublic();
+      allow write: if isOwner(userId);
+    }
+
+    // Allow collectionGroup queries for "Shared with me" and Public Access
+    match /{path=**}/user_files/{fileId} {
+      allow read: if isSharedWithMe() || isPublic();
     }
 
     // Explicitly deny everything else

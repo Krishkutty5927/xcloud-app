@@ -24,7 +24,8 @@ interface UserMetadata {
       pushToasts: boolean;
     };
     security: {
-      twoFactorEnabled: boolean;
+      passcodeEnabled: boolean;
+      passcode?: string;
       loginAlerts: boolean;
     };
   };
@@ -34,10 +35,12 @@ interface AuthContextType {
   user: User | null;
   userMetadata: UserMetadata | null;
   loading: boolean;
+  isAppLocked: boolean;
   theme: 'light' | 'dark' | 'system';
   resolvedTheme: 'light' | 'dark';
   setTheme: (theme: 'light' | 'dark' | 'system') => void;
   toggleTheme: () => void;
+  unlockApp: (passcode: string) => boolean;
   logout: () => Promise<void>;
 }
 
@@ -45,10 +48,12 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   userMetadata: null,
   loading: true,
+  isAppLocked: false,
   theme: 'system',
   resolvedTheme: 'light',
   setTheme: () => {},
   toggleTheme: () => {},
+  unlockApp: () => false,
   logout: async () => {},
 });
 
@@ -56,8 +61,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [userMetadata, setUserMetadata] = useState<UserMetadata | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isAppLocked, setIsAppLocked] = useState(false);
   const [theme, setThemeState] = useState<'light' | 'dark' | 'system'>('system');
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light');
+
+  // Track if session was already unlocked during this browser session
+  const [sessionUnlocked, setSessionUnlocked] = useState(false);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | 'system' | null;
@@ -65,6 +74,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setThemeState(savedTheme);
     }
   }, []);
+
+  useEffect(() => {
+    // If metadata changes and passcode is enabled, and we haven't unlocked yet, lock the app
+    if (userMetadata?.preferences?.security?.passcodeEnabled && !sessionUnlocked) {
+      setIsAppLocked(true);
+    } else {
+      setIsAppLocked(false);
+    }
+  }, [userMetadata, sessionUnlocked]);
+
+  const unlockApp = (inputPasscode: string) => {
+    if (inputPasscode === userMetadata?.preferences?.security?.passcode) {
+      setSessionUnlocked(true);
+      setIsAppLocked(false);
+      return true;
+    }
+    return false;
+  };
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -138,7 +165,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 pushToasts: true,
               },
               security: {
-                twoFactorEnabled: false,
+                passcodeEnabled: false,
                 loginAlerts: true,
               }
             }
@@ -188,7 +215,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 preferences: {
                   theme: 'system',
                   notifications: { emailAlerts: true, pushToasts: true },
-                  security: { twoFactorEnabled: false, loginAlerts: true }
+                  security: { passcodeEnabled: false, loginAlerts: true }
                 }
               }).catch(err => console.error("[AUTH] Pref init failed:", err));
             }
@@ -219,11 +246,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const logout = async () => {
+    setSessionUnlocked(false);
     await firebaseSignOut(auth);
   };
 
   return (
-    <AuthContext.Provider value={{ user, userMetadata, loading, theme, resolvedTheme, setTheme, toggleTheme, logout }}>
+    <AuthContext.Provider value={{ user, userMetadata, loading, isAppLocked, theme, resolvedTheme, setTheme, toggleTheme, unlockApp, logout }}>
       {children}
     </AuthContext.Provider>
   );

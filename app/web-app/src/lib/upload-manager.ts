@@ -21,6 +21,8 @@ export interface FileEntry {
   isPublic?: boolean;
   shareToken?: string;
   isPubliclyShared?: boolean;
+  lastOpenedTimestamp?: any;
+  isLocked?: boolean;
 }
 
 export type UploadProgressCallback = (progress: number) => void;
@@ -43,9 +45,9 @@ export const uploadFile = async (
   if (!userId) throw new Error("Auth State Error: No User ID");
 
   // 1. Project Global Limit Validation
-  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB Global Project Limit
+  const MAX_FILE_SIZE = 450 * 1024 * 1024; // 450MB Global Project Limit
   if (file.size > MAX_FILE_SIZE) {
-    throw new Error("File exceeds the 50MB project limit.");
+    throw new Error("File exceeds the 450MB project limit.");
   }
 
   // 2. Quota Validation
