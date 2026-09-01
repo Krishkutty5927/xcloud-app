@@ -1,6 +1,8 @@
 package com.cloud.x.app.shared.ui
 
 import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import androidx.compose.animation.*
 import androidx.compose.foundation.clickable
@@ -161,7 +163,7 @@ fun VideoPlayerPro(file: FileEntry) {
     var isLandscape by remember { mutableStateOf(false) }
 
     LaunchedEffect(isLandscape) {
-        val activity = context as? Activity
+        val activity = context.findActivity()
         activity?.requestedOrientation = if (isLandscape) {
             ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         } else {
@@ -172,7 +174,7 @@ fun VideoPlayerPro(file: FileEntry) {
     DisposableEffect(Unit) {
         onDispose { 
             exoPlayer.release() 
-            (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            context.findActivity()?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
     }
 
@@ -365,4 +367,13 @@ private fun getFileIcon(fileType: String): ImageVector {
         fileType.contains("PDF", true) -> Icons.Default.PictureAsPdf
         else -> Icons.AutoMirrored.Filled.InsertDriveFile
     }
+}
+
+private fun Context.findActivity(): Activity? {
+    var context = this
+    while (context is ContextWrapper) {
+        if (context is Activity) return context
+        context = context.baseContext
+    }
+    return null
 }

@@ -14,7 +14,8 @@ import {
   ShieldCheck,
   ChevronLeft,
   ChevronRight,
-  Loader2
+  Loader2,
+  Image as ImageIcon
 } from 'lucide-react';
 import { FileEntry } from '@/lib/upload-manager';
 import { formatFileSize, cn } from '@/lib/utils';

@@ -700,11 +700,7 @@ export default function SettingsPage() {
                        <button
                          onClick={(e) => {
                            e.stopPropagation();
-                           if (item.id === 'security.twoFactorEnabled') {
-                             handleToggleBiometric(item.id, item.enabled || false);
-                           } else {
-                             updatePreference(item.id, !item.enabled);
-                           }
+                           updatePreference(item.id, !item.enabled);
                          }}
                          className="transition-transform active:scale-90"
                        >

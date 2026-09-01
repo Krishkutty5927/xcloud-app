@@ -61,6 +61,13 @@ export const VideoPlayer = ({ file, onClose }: VideoPlayerProps) => {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const compressorRef = useRef<DynamicsCompressorNode | null>(null);
 
+  // Synchronize volume state with the video element
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.volume = volume;
+    }
+  }, [volume]);
+
   // Track real fullscreen changes (e.g. from ESC key)
   useEffect(() => {
     const handleFsChange = () => {
@@ -296,7 +303,6 @@ export const VideoPlayer = ({ file, onClose }: VideoPlayerProps) => {
         }}
         onPause={() => setIsPlaying(false)}
         muted={isMuted}
-        volume={volume}
         autoPlay
         playsInline
       />
