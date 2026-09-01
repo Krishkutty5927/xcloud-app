@@ -284,12 +284,14 @@ fun DashboardScreen(
             }
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showUploadSheet = true },
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                contentColor = MaterialTheme.colorScheme.primary,
-            ) {
-                Icon(Icons.Default.Add, "Add", modifier = Modifier.size(28.dp))
+            if (currentTab == DashboardTab.Home || currentTab == DashboardTab.Files) {
+                FloatingActionButton(
+                    onClick = { showUploadSheet = true },
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    contentColor = MaterialTheme.colorScheme.primary,
+                ) {
+                    Icon(Icons.Default.Add, "Add", modifier = Modifier.size(28.dp))
+                }
             }
         }
     ) { padding ->
@@ -958,7 +960,7 @@ fun ProfileSheetContent(
     onChangePasswordClick: () -> Unit = {},
     onDevicesClick: () -> Unit = {},
     onToggleBiometric: (Boolean) -> Unit = {},
-    onUpdatePreference: (String, Boolean) -> Unit = { _, _ -> }
+    onUpdatePreference: (String, Any) -> Unit = { _, _ -> }
 ) {
     Column(
         modifier = Modifier
@@ -1078,6 +1080,29 @@ fun ProfileSheetContent(
         HorizontalDivider(modifier = Modifier.padding(horizontal = 24.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
         
         user?.let {
+            Text(
+                "Interface Theme", 
+                style = MaterialTheme.typography.labelLarge, 
+                fontWeight = FontWeight.Black,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp).align(Alignment.Start)
+            )
+            Row(
+                modifier = Modifier.padding(horizontal = 24.dp).fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val currentTheme = it.preferences.theme
+                listOf("light", "dark", "system").forEach { t ->
+                    FilterChip(
+                        selected = currentTheme == t,
+                        onClick = { onUpdatePreference("preferences.theme", t) },
+                        label = { Text(t.replaceFirstChar { it.uppercase() }) },
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             ListItem(
                 headlineContent = { Text("Hardware Nodes", fontWeight = FontWeight.Bold) },
                 supportingContent = { Text("Manage authorized devices", style = MaterialTheme.typography.labelSmall) },

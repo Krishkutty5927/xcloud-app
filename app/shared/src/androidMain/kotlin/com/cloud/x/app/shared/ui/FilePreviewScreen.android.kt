@@ -1,5 +1,7 @@
 package com.cloud.x.app.shared.ui
 
+import android.app.Activity
+import android.content.pm.ActivityInfo
 import androidx.compose.animation.*
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
@@ -55,13 +57,24 @@ actual fun PreviewContent(file: FileEntry) {
         file.fileType.contains("video", true) || file.fileType.contains("audio", true) -> {
             VideoPlayerPro(file)
         }
-        file.fileType.contains("PDF", true) || file.fileType.contains("Document", true) -> {
+        file.fileType.contains("PDF", true) || 
+        file.fileType.contains("Document", true) ||
+        file.fileName.endsWith(".docx", true) ||
+        file.fileName.endsWith(".doc", true) ||
+        file.fileName.endsWith(".xlsx", true) ||
+        file.fileName.endsWith(".xls", true) ||
+        file.fileName.endsWith(".pptx", true) ||
+        file.fileName.endsWith(".ppt", true) ||
+        file.fileName.endsWith(".odt", true) ||
+        file.fileName.endsWith(".rtf", true) -> {
             // PDF/Document Preview using WebView and Google Docs Viewer
             AndroidView(
                 factory = {
                     WebView(it).apply {
                         webViewClient = WebViewClient()
                         settings.javaScriptEnabled = true
+                        settings.loadWithOverviewMode = true
+                        settings.useWideViewPort = true
                         val url = "https://docs.google.com/viewer?embedded=true&url=${file.downloadUrl}"
                         loadUrl(url)
                     }
@@ -145,9 +158,22 @@ fun VideoPlayerPro(file: FileEntry) {
     var showControls by remember { mutableStateOf(true) }
     var resizeMode by remember { mutableStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
     var isZapEnabled by remember { mutableStateOf(false) }
+    var isLandscape by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isLandscape) {
+        val activity = context as? Activity
+        activity?.requestedOrientation = if (isLandscape) {
+            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
 
     DisposableEffect(Unit) {
-        onDispose { exoPlayer.release() }
+        onDispose { 
+            exoPlayer.release() 
+            (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
     }
 
     LaunchedEffect(exoPlayer) {
@@ -210,6 +236,13 @@ fun VideoPlayerPro(file: FileEntry) {
                     )
                     
                     Row {
+                        IconButton(onClick = { isLandscape = !isLandscape }) {
+                            Icon(
+                                if (isLandscape) Icons.Default.ScreenLockRotation else Icons.Default.ScreenRotation, 
+                                null, 
+                                tint = Color.White
+                            )
+                        }
                         IconButton(onClick = {
                             resizeMode = when (resizeMode) {
                                 AspectRatioFrameLayout.RESIZE_MODE_FIT -> AspectRatioFrameLayout.RESIZE_MODE_FILL

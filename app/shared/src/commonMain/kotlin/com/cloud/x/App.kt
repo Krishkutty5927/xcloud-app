@@ -2,6 +2,7 @@ package com.cloud.x
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -115,7 +116,8 @@ fun App(
     }
 
     var user by remember { mutableStateOf(Firebase.auth.currentUser) }
-    var isDarkTheme by remember { mutableStateOf(false) } 
+    val systemDark = isSystemInDarkTheme()
+    var isDarkTheme by remember { mutableStateOf(systemDark) } 
     var isLocked by remember { mutableStateOf(false) }
     var hasAuthenticatedSession by remember { mutableStateOf(false) }
     var isInitializing by remember { mutableStateOf(true) }
@@ -134,14 +136,14 @@ fun App(
     // Sync theme and biometric lock status
     val userMetadata by storageViewModel.userMetadata.collectAsState()
     
-    LaunchedEffect(user, userMetadata) {
+    LaunchedEffect(user, userMetadata, systemDark) {
         val currentMetadata = userMetadata
         if (user != null && currentMetadata != null) {
             // Sync theme
             isDarkTheme = when(currentMetadata.preferences.theme) {
                 "dark" -> true
                 "light" -> false
-                else -> false
+                else -> systemDark
             }
             
             // Handle Biometric Lock
