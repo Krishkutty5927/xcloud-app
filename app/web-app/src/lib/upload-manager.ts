@@ -23,6 +23,7 @@ export interface FileEntry {
   isPubliclyShared?: boolean;
   lastOpenedTimestamp?: any;
   isLocked?: boolean;
+  playbackPosition?: number; // Last viewed position in seconds
 }
 
 export type UploadProgressCallback = (progress: number) => void;

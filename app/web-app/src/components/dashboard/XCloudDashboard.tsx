@@ -14,7 +14,9 @@ import {
   ChevronRight,
   FolderPlus,
   ShieldCheck,
-  Star
+  Star,
+  File,
+  Lock
 } from 'lucide-react';
 import { moveToTrash } from '@/lib/trash-manager';
 import { updateFileName, createFolder, updateLastOpened } from '@/lib/file-manager';
@@ -22,26 +24,57 @@ import { generatePublicShareLink } from '@/lib/share-manager';
 import { collection, query, where, onSnapshot, doc, updateDoc, collectionGroup, writeBatch, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { uploadFile, FileEntry } from '@/lib/upload-manager';
+import { Invitation } from '@/lib/invitation-manager';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 import { StorageWidget } from './storage-widget';
 import { cn } from '@/lib/utils';
 import { FileItem } from './FileItem';
 import { BatchActionBar } from './BatchActionBar';
+import { InvitationItem } from './InvitationItem';
 
 const ShareFileModal = dynamic(() => import('./ShareFileModal').then(mod => mod.ShareFileModal));
 const MoveToFolderModal = dynamic(() => import('./MoveToFolderModal').then(mod => mod.MoveToFolderModal));
 const MediaPreviewer = dynamic(() => import('./MediaPreviewer').then(mod => mod.MediaPreviewer));
 const FileInfoPanel = dynamic(() => import('./FileInfoPanel').then(mod => mod.FileInfoPanel));
 
+// In-memory cache to speed up tab switching between mounts
+const DASHBOARD_CACHE: Record<string, { files: FileEntry[], invitations: Invitation[] }> = {};
+
+const FileItemSkeleton = ({ viewMode }: { viewMode: 'grid' | 'list' }) => (
+  <div className={cn(
+    "bg-surface-variant/10 rounded-[2rem] animate-pulse",
+    viewMode === 'grid' ? "aspect-square p-6" : "h-20 p-4"
+  )}>
+    <div className="flex items-center gap-4 h-full">
+       <div className="w-12 h-12 bg-surface-variant/20 rounded-2xl shrink-0" />
+       <div className="flex-1 space-y-2">
+          <div className="h-4 bg-surface-variant/20 rounded w-3/4" />
+          <div className="h-3 bg-surface-variant/20 rounded w-1/2" />
+       </div>
+    </div>
+  </div>
+);
+
 export const XCloudDashboard = ({ filter = 'all' }: { filter?: 'all' | 'starred' | 'shared' | 'files' }) => {
   const { user, userMetadata } = useAuth();
   const { showToast, hideToast } = useToast();
   const { searchQuery } = useSearch();
 
-  const [files, setFiles] = useState<FileEntry[]>([]);
+  // 1. Core Navigation State (Declared first so cache can use it)
+  const [currentFolderId, setCurrentFolderId] = useState('root');
+  const [breadcrumbs, setBreadcrumbs] = useState<{ id: string, name: string }[]>([{ id: 'root', name: 'My Drive' }]);
+
+  // 2. Caching Layer
+  const cacheKey = `${filter}-${currentFolderId}-${user?.uid}`;
+  const cachedData = DASHBOARD_CACHE[cacheKey];
+
+  // 3. Data States
+  const [files, setFiles] = useState<FileEntry[]>(cachedData?.files || []);
+  const [invitations, setInvitations] = useState<Invitation[]>(cachedData?.invitations || []);
   const [uploadingFiles, setUploadingFiles] = useState<Record<string, number>>({});
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!cachedData);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [editingFile, setEditingFile] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
@@ -62,37 +95,39 @@ export const XCloudDashboard = ({ filter = 'all' }: { filter?: 'all' | 'starred'
   // Shared View Sub-Filter
   const [sharedSubFilter, setSharedSubFilter] = useState<'with_me' | 'by_me' | 'invitations'>('with_me');
 
-  // Reset state when sub-filter changes
-  useEffect(() => {
-    if (filter === 'shared') {
-      setIsLoading(true);
-      setFiles([]);
-    }
-  }, [sharedSubFilter, filter]);
-
-  // Folder and Navigation State
-  const [currentFolderId, setCurrentFolderId] = useState('root');
-  const [breadcrumbs, setBreadcrumbs] = useState<{ id: string, name: string }[]>([{ id: 'root', name: 'My Drive' }]);
-
   useEffect(() => {
     if (!user) return;
+
+    if (cachedData) {
+       setIsRefreshing(true);
+    } else {
+       setIsLoading(true);
+    }
 
     let q;
 
     if (filter === 'shared') {
       if (!user.email) return;
 
-      if (sharedSubFilter === 'with_me' || sharedSubFilter === 'invitations') {
+      if (sharedSubFilter === 'invitations') {
+        q = query(
+          collection(db, 'invitations'),
+          where('recipientEmail', '==', user.email.toLowerCase()),
+          where('status', 'in', ['PENDING', 'REJECTED']),
+          orderBy('createdAt', 'desc')
+        );
+      } else if (sharedSubFilter === 'with_me') {
         q = query(
           collectionGroup(db, 'user_files'),
           where('sharedWithEmails', 'array-contains', user.email.toLowerCase()),
           where('isDeleted', '==', false)
         );
       } else {
-        // "You shared" - Query own files
+        // "You shared" - Query invitations sent by the user
         q = query(
-          collection(db, 'users', user.uid, 'user_files'),
-          where('isDeleted', '==', false)
+          collection(db, 'invitations'),
+          where('senderId', '==', user.uid),
+          orderBy('createdAt', 'desc')
         );
       }
     } else if (filter === 'all') {
@@ -117,18 +152,32 @@ export const XCloudDashboard = ({ filter = 'all' }: { filter?: 'all' | 'starred'
     }
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
+      if (filter === 'shared' && (sharedSubFilter === 'invitations' || sharedSubFilter === 'by_me')) {
+        let inviteDocs = snapshot.docs.map(doc => doc.data() as Invitation);
+
+        // Client-side cleanup for Rejected items older than 24 hours
+        if (sharedSubFilter === 'invitations') {
+           const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+           inviteDocs = inviteDocs.filter(inv => {
+              if (inv.status === 'REJECTED' && inv.rejectedAt?.seconds) {
+                 return (inv.rejectedAt.seconds * 1000) > oneDayAgo;
+              }
+              return true;
+           });
+        }
+
+        setInvitations(inviteDocs);
+        DASHBOARD_CACHE[cacheKey] = { ...DASHBOARD_CACHE[cacheKey], invitations: inviteDocs };
+        setIsLoading(false);
+        setIsRefreshing(false);
+        return;
+      }
+
       let docs = snapshot.docs.map(doc => doc.data() as FileEntry);
 
       if (filter === 'shared' && sharedSubFilter === 'by_me') {
-        // Client-side filter for shared files (Firestore doesn't support logical OR for complex queries easily)
+        // Client-side filter for shared files
         docs = docs.filter(f => f.isPubliclyShared || (f.sharedWithEmails && f.sharedWithEmails.length > 0));
-      }
-
-      if (filter === 'shared' && sharedSubFilter === 'invitations') {
-        // Placeholder for invitations logic - maybe filter by a 'pending' status if added later
-        // For now, let's say Invitations are files shared with user in the last 48 hours
-        const twoDaysAgo = Date.now() - (48 * 60 * 60 * 1000);
-        docs = docs.filter(f => (f.uploadTimestamp?.seconds * 1000) > twoDaysAgo);
       }
 
       if (filter === 'all') {
@@ -136,26 +185,10 @@ export const XCloudDashboard = ({ filter = 'all' }: { filter?: 'all' | 'starred'
         docs = docs.filter(f => f.fileType !== 'Folder');
       }
 
-      if (searchQuery) {
-        docs = docs.filter(f => f.fileName.toLowerCase().includes(searchQuery.toLowerCase()));
-      }
-
-      docs.sort((a, b) => {
-        if (filter === 'all') {
-          const timeA = a.lastOpenedTimestamp?.seconds || a.uploadTimestamp?.seconds || 0;
-          const timeB = b.lastOpenedTimestamp?.seconds || b.uploadTimestamp?.seconds || 0;
-          return timeB - timeA;
-        }
-
-        if (a.fileType === 'Folder' && b.fileType !== 'Folder') return -1;
-        if (a.fileType !== 'Folder' && b.fileType === 'Folder') return 1;
-        const timeA = a.uploadTimestamp?.seconds || 0;
-        const timeB = b.uploadTimestamp?.seconds || 0;
-        return timeB - timeA;
-      });
-
       setFiles(docs);
+      DASHBOARD_CACHE[cacheKey] = { ...DASHBOARD_CACHE[cacheKey], files: docs };
       setIsLoading(false);
+      setIsRefreshing(false);
     }, (error) => {
       console.error("[DASHBOARD] Sync Error:", error);
       showToast("Sync failed. Check your connection.", "error");
@@ -164,6 +197,28 @@ export const XCloudDashboard = ({ filter = 'all' }: { filter?: 'all' | 'starred'
 
     return () => unsubscribe();
   }, [user, filter, currentFolderId, searchQuery, showToast, sharedSubFilter]);
+
+  const sortedFiles = useMemo(() => {
+    let docs = [...files];
+
+    if (searchQuery) {
+      docs = docs.filter(f => f.fileName.toLowerCase().includes(searchQuery.toLowerCase()));
+    }
+
+    return docs.sort((a, b) => {
+      if (filter === 'all') {
+        const timeA = a.lastOpenedTimestamp?.seconds || a.uploadTimestamp?.seconds || 0;
+        const timeB = b.lastOpenedTimestamp?.seconds || b.uploadTimestamp?.seconds || 0;
+        return timeB - timeA;
+      }
+
+      if (a.fileType === 'Folder' && b.fileType !== 'Folder') return -1;
+      if (a.fileType !== 'Folder' && b.fileType === 'Folder') return 1;
+      const timeA = a.uploadTimestamp?.seconds || 0;
+      const timeB = b.uploadTimestamp?.seconds || 0;
+      return timeB - timeA;
+    });
+  }, [files, searchQuery, filter]);
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (!user || !userMetadata) return;
@@ -301,18 +356,10 @@ export const XCloudDashboard = ({ filter = 'all' }: { filter?: 'all' | 'starred'
     showToast(`Downloading ${file.fileName}...`, 'info');
   }, [showToast]);
 
-  const handleShareFile = useCallback(async (file: FileEntry) => {
-    if (!user) return;
-    try {
-      const token = await generatePublicShareLink(user.uid, file);
-      const shareUrl = `${window.location.origin}/#shared/${token}`;
-      await navigator.clipboard.writeText(shareUrl);
-      showToast("Secure unique share link copied to clipboard!", "success");
-    } catch (error: any) {
-      console.error("[SHARE] Error:", error);
-      showToast("Failed to generate share link", "error");
-    }
-  }, [user, showToast]);
+  const handleShareFile = useCallback((file: FileEntry) => {
+    setSelectedFileForShare(file);
+    setIsShareModalOpen(true);
+  }, []);
 
   const toggleSelection = useCallback((e: React.MouseEvent, fileId: string) => {
     e.stopPropagation();
@@ -364,9 +411,14 @@ export const XCloudDashboard = ({ filter = 'all' }: { filter?: 'all' | 'starred'
         navigateToFolder(file);
       }
     } else {
-      setSelectedFileForInfo(file);
+      // Single click to open the inbuilt opener (Media Previewer)
+      // Only update 'Last Opened' if we are the owner (prevents 'No document to update' error for shared files)
+      if (user && file.ownerId === user.uid) {
+        updateLastOpened(user.uid, file.fileId);
+      }
+      setPreviewFile(file);
     }
-  }, [selectedFileIds, toggleSelection, navigateToFolder, unlockedFolderIds]);
+  }, [user, selectedFileIds, toggleSelection, navigateToFolder, unlockedFolderIds]);
 
   if (!user) return null;
 
@@ -473,6 +525,18 @@ export const XCloudDashboard = ({ filter = 'all' }: { filter?: 'all' | 'starred'
               {filter === 'starred' ? 'Favourites' :
                filter === 'shared' ? (sharedSubFilter === 'with_me' ? 'Shared with you' : sharedSubFilter === 'by_me' ? 'You shared' : 'Invitations') :
                filter === 'all' ? 'Recently Opened' : 'My Drive'}
+
+              <AnimatePresence>
+                {isRefreshing && (
+                  <motion.span
+                    initial={{ opacity: 0, scale: 0.5 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.5 }}
+                    className="ml-2 w-2 h-2 bg-primary rounded-full animate-pulse shadow-[0_0_8px_rgba(0,82,204,0.5)]"
+                    title="Syncing with vault..."
+                  />
+                )}
+              </AnimatePresence>
             </h1>
 
             {filter === 'shared' && (
@@ -622,8 +686,59 @@ export const XCloudDashboard = ({ filter = 'all' }: { filter?: 'all' | 'starred'
 
             <div className={`relative transition-all duration-300 min-h-[600px] ${isDragActive ? 'scale-[0.98]' : ''}`}>
               {isLoading ? (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <Loader2 className="animate-spin text-primary" size={48} />
+                <div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6" : "space-y-3"}>
+                   {[...Array(6)].map((_, i) => <FileItemSkeleton key={i} viewMode={viewMode} />)}
+                </div>
+              ) : filter === 'shared' && sharedSubFilter === 'invitations' ? (
+                <div className="space-y-6">
+                   {invitations.length === 0 ? (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-16 bg-surface-variant/10 border-2 border-dashed border-outline/10 rounded-[3rem]">
+                        <div className="w-24 h-24 bg-primary-container text-primary rounded-[2rem] flex items-center justify-center mb-8 shadow-inner">
+                           <Plus size={48} />
+                        </div>
+                        <h2 className="text-headline-small font-black text-on-surface mb-3">No Invitations</h2>
+                        <p className="text-on-surface-variant font-medium max-w-sm mx-auto leading-relaxed">Secure file transfer invitations will appear here for your verification.</p>
+                      </div>
+                   ) : (
+                      invitations.map(invite => <InvitationItem key={invite.id} invitation={invite} />)
+                   )}
+                </div>
+              ) : filter === 'shared' && sharedSubFilter === 'by_me' ? (
+                <div className="space-y-4">
+                   <h3 className="text-[10px] font-black text-outline uppercase tracking-[0.3em] mb-6 px-1">Outgoing Transmission Logs</h3>
+                   {invitations.length === 0 ? (
+                      <div className="p-16 text-center opacity-40 italic font-medium">No outgoing shares logged.</div>
+                   ) : (
+                     invitations.map(invite => (
+                       <div key={invite.id} className="bg-surface-variant/20 border border-outline/5 p-6 rounded-[2rem] flex items-center justify-between group hover:bg-surface-variant/40 transition-colors">
+                          <div className="flex items-center gap-5">
+                             <div className="w-12 h-12 bg-surface rounded-2xl flex items-center justify-center shadow-sm">
+                                <File size={24} className="text-primary" />
+                             </div>
+                             <div>
+                                <p className="font-black text-on-surface text-sm truncate max-w-xs">{invite.fileName}</p>
+                                <div className="flex items-center gap-3 mt-1">
+                                   <span className="text-[10px] font-bold text-outline">To: {invite.recipientEmail || invite.recipientPhone}</span>
+                                   <span className="w-1 h-1 bg-outline/20 rounded-full" />
+                                   <span className={cn(
+                                     "text-[10px] font-black uppercase tracking-widest",
+                                     invite.status === 'PENDING' ? "text-amber-500" :
+                                     invite.status === 'ACCEPTED' ? "text-emerald-500" : "text-error"
+                                   )}>
+                                     {invite.status === 'PENDING' ? 'Pending Acceptance' :
+                                      invite.status === 'REJECTED' ? 'Invitation Declined' : 'Active Access'}
+                                   </span>
+                                </div>
+                             </div>
+                          </div>
+                          {invite.status === 'PENDING' && (
+                             <div className="flex items-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <span className="text-[10px] font-black text-outline uppercase tracking-tighter">Waiting for node response...</span>
+                             </div>
+                          )}
+                       </div>
+                     ))
+                   )}
                 </div>
               ) : files.length === 0 && !isDragActive ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-16 bg-surface-variant/10 border-2 border-dashed border-outline/10 rounded-[3rem]">
@@ -644,7 +759,7 @@ export const XCloudDashboard = ({ filter = 'all' }: { filter?: 'all' | 'starred'
                 </div>
               ) : (
                 <div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6" : "space-y-3"}>
-                  {files.map((file) => (
+                  {sortedFiles.map((file) => (
                     <FileItem
                       key={file.fileId}
                       file={file}
@@ -658,12 +773,8 @@ export const XCloudDashboard = ({ filter = 'all' }: { filter?: 'all' | 'starred'
                       onCancelRename={() => setEditingFile(null)}
                       onToggleSelection={toggleSelection}
                       onClick={(e) => handleFileClick(e, file)}
-                      onDoubleClick={() => {
-                        if (file.fileType !== 'Folder') {
-                          if (user) updateLastOpened(user.uid, file.fileId);
-                          setPreviewFile(file);
-                        }
-                      }}
+                      onDoubleClick={() => {}}
+                      onInfoClick={(file) => setSelectedFileForInfo(file)}
                       onToggleStar={toggleStar}
                       onDownload={handleDownload}
                       onShare={handleShareFile}

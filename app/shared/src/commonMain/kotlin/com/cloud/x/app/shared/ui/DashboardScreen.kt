@@ -1,5 +1,6 @@
 package com.cloud.x.app.shared.ui
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.*
@@ -43,6 +44,49 @@ enum class DashboardTab(val label: String, val icon: ImageVector, val selectedIc
     Favourites("Favourites", Icons.Outlined.StarBorder, Icons.Filled.Star),
     Shared("Shared", Icons.Outlined.People, Icons.Filled.People),
     Files("Files", Icons.Outlined.Folder, Icons.Filled.Folder)
+}
+
+@Composable
+fun FileItemSkeleton(isGrid: Boolean = false) {
+    val infiniteTransition = rememberInfiniteTransition()
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.7f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        )
+    )
+
+    if (isGrid) {
+        Surface(
+            modifier = Modifier.width(140.dp).height(140.dp),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = alpha),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().height(80.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Box(modifier = Modifier.width(80.dp).height(12.dp).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)))
+            }
+        }
+    } else {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh))
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Box(modifier = Modifier.width(120.dp).height(14.dp).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)))
+                Spacer(modifier = Modifier.height(4.dp))
+                Box(modifier = Modifier.width(60.dp).height(10.dp).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)))
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -204,6 +248,7 @@ fun DashboardScreen(
                     userMetadata = userMetadata,
                     isDarkTheme = isDarkTheme,
                     unreadCount = unreadActivitiesCount,
+                    isRefreshing = isRefreshing,
                     onThemeToggle = onThemeToggle,
                     onNotificationClick = { showActivitySheet = true },
                     onProfileClick = { showProfileSheet = true }
@@ -615,6 +660,7 @@ fun DriveSearchBar(
     userMetadata: UserMetadata?,
     isDarkTheme: Boolean,
     unreadCount: Int = 0,
+    isRefreshing: Boolean = false,
     onThemeToggle: () -> Unit,
     onNotificationClick: () -> Unit,
     onProfileClick: () -> Unit
@@ -650,11 +696,22 @@ fun DriveSearchBar(
                 decorationBox = { innerTextField ->
                     Box(modifier = Modifier.fillMaxWidth()) {
                         if (query.isEmpty()) {
-                            Text(
-                                "Search in Drive",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "Search in Drive",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (isRefreshing) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(6.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.primary)
+                                    )
+                                }
+                            }
                         }
                         innerTextField()
                     }
@@ -732,6 +789,21 @@ fun HomeScreen(
         modifier = Modifier.fillMaxSize(),
         contentPadding = contentPadding
     ) {
+        if (files.isEmpty() && viewModel.isRefreshing.value) {
+            item {
+                Text(
+                    "Synchronizing Vault...",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            items(6) {
+                FileItemSkeleton(isGrid = false)
+            }
+        }
+
         if (recentFiles.isNotEmpty()) {
             item {
                 Text(

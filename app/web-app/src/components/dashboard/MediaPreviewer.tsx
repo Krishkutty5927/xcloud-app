@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { FileEntry } from '@/lib/upload-manager';
 import { formatFileSize, cn } from '@/lib/utils';
+import { VideoPlayer } from './VideoPlayer';
 
 interface MediaPreviewerProps {
   file: FileEntry | null;
@@ -94,7 +95,12 @@ export const MediaPreviewer = ({ file, isOpen, onClose }: MediaPreviewerProps) =
                  <X size={24} />
                </button>
                <div className="min-w-0 max-w-md">
-                 <h2 className="text-on-surface font-black text-lg truncate leading-tight">{file.fileName}</h2>
+                 <div className="flex items-center gap-3">
+                    <h2 className="text-on-surface font-black text-lg truncate leading-tight">{file.fileName}</h2>
+                    {isVideo && (
+                      <span className="text-[10px] font-black text-primary bg-primary-container/40 px-2 py-0.5 rounded border border-primary/20 uppercase tracking-widest shrink-0">4K ABR Node</span>
+                    )}
+                 </div>
                  <div className="flex items-center gap-3 mt-1">
                     <span className="text-[10px] font-black text-primary bg-primary-container px-2 py-0.5 rounded-md uppercase tracking-wider">{file.fileType}</span>
                     <p className="text-on-surface-variant text-[10px] font-bold uppercase tracking-widest">{formatFileSize(file.fileSize)}</p>
@@ -132,7 +138,7 @@ export const MediaPreviewer = ({ file, isOpen, onClose }: MediaPreviewerProps) =
           </header>
 
           {/* Media Viewport */}
-          <main className="flex-1 relative flex items-center justify-center overflow-hidden p-12">
+          <main className="flex-1 relative flex items-center justify-center overflow-hidden px-12 py-4">
              <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-20">
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-primary/20 rounded-full blur-[160px]" />
              </div>
@@ -147,28 +153,20 @@ export const MediaPreviewer = ({ file, isOpen, onClose }: MediaPreviewerProps) =
                initial={{ scale: 0.9, opacity: 0, y: 20 }}
                animate={{ scale: 1, opacity: 1, y: 0 }}
                transition={{ type: 'spring', damping: 30, stiffness: 200 }}
-               className="relative max-w-full max-h-full flex items-center justify-center z-10"
+               className="relative w-full h-full max-h-[calc(100vh-theme(spacing.20)-theme(spacing.28)-2rem)] flex items-center justify-center z-10"
                style={{
                  scale: zoom,
                  rotate: rotation
                }}
              >
-                {isImage && (
+                {isVideo ? (
+                  <VideoPlayer file={file} onClose={onClose} />
+                ) : isImage && (
                   <img
                     src={file.downloadUrl}
                     alt={file.fileName}
                     onLoad={() => setIsLoading(false)}
                     className="max-w-full max-h-[75vh] object-contain rounded-3xl shadow-[0_32px_64px_-12px_rgba(0,0,0,0.4)] border border-outline/10"
-                  />
-                )}
-
-                {isVideo && (
-                  <video
-                    src={file.downloadUrl}
-                    controls
-                    autoPlay
-                    onLoadedData={() => setIsLoading(false)}
-                    className="max-w-5xl w-full max-h-[70vh] rounded-[2.5rem] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.5)] border-4 border-surface shadow-2xl"
                   />
                 )}
 

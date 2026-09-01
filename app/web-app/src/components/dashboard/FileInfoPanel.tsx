@@ -20,7 +20,8 @@ import {
   Globe,
   Info,
   Shield,
-  Unlock
+  Unlock,
+  Lock
 } from 'lucide-react';
 import { FileEntry } from '@/lib/upload-manager';
 import { formatFileSize, cn } from '@/lib/utils';
@@ -111,7 +112,7 @@ export const FileInfoPanel = ({
                <div className="grid grid-cols-5 gap-2 px-6 py-6 border-y border-outline/5">
                   {[
                     { icon: Download, label: 'Get', action: () => onDownload(file), color: 'primary' },
-                    { icon: Share2, label: 'Link', action: () => onShare(file), color: 'primary' },
+                    { icon: Share2, label: 'Share', action: () => onShare(file), color: 'primary' },
                     { icon: Edit2, label: 'Edit', action: () => onRename(file), color: 'primary' },
                     { icon: file.isLocked ? Unlock : Lock, label: file.isLocked ? 'Open' : 'Lock', action: () => onToggleLock(file), color: 'primary' },
                     { icon: Trash2, label: 'Bin', action: () => onDelete(file), color: 'error' }

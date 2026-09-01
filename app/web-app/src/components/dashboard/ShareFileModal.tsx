@@ -2,9 +2,10 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Mail, UserPlus, Globe, Copy, Check, Trash2, Loader2 } from 'lucide-react';
+import { X, Mail, UserPlus, Globe, Copy, Check, Trash2, Loader2, ShieldLock, Clock, Phone } from 'lucide-react';
 import { FileEntry } from '@/lib/upload-manager';
 import { shareFileWithUser, removeCollaborator, togglePublicAccess } from '@/lib/share-manager';
+import { createInvitation } from '@/lib/invitation-manager';
 import { useAuth } from '@/context/auth-context';
 import { useToast } from '@/context/toast-context';
 import { cn } from '@/lib/utils';
@@ -21,6 +22,10 @@ export const ShareFileModal = ({
   const { user, userMetadata } = useAuth();
   const { showToast } = useToast();
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [shareType, setShareType] = useState<'email' | 'phone'>('email');
+  const [passcode, setPasscode] = useState('');
+  const [expiryHours, setExpiryHours] = useState('24');
   const [role, setRole] = useState<'viewer' | 'editor'>('viewer');
   const [isLoading, setIsLoading] = useState(false);
   const [isCopied, setIsPublicCopied] = useState(false);
@@ -29,13 +34,37 @@ export const ShareFileModal = ({
 
   const handleShare = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !email.trim()) return;
+    if (!user || !userMetadata) return;
+
+    const recipientId = shareType === 'email' ? email.trim() : phone.trim();
+    if (!recipientId) return;
 
     setIsLoading(true);
     try {
-      await shareFileWithUser(user.uid, file.fileId, email, role);
-      showToast(`Invited ${email}`, 'success');
+      // 1. Validation
+      if (passcode && passcode.length !== 5) {
+        throw new Error("Security passcode must be exactly 5 alphanumeric characters (A-Z, 0-9).");
+      }
+
+      if (shareType === 'phone' && !/^\+[1-9]\d{1,14}$/.test(phone)) {
+        throw new Error("Invalid phone format. Use E.164 standard (e.g., +1234567890).");
+      }
+
+      // 2. Create Invitation
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + parseInt(expiryHours));
+
+      await createInvitation(
+        { id: user.uid, email: user.email!, name: userMetadata.name },
+        file,
+        { email: shareType === 'email' ? email : undefined, phone: shareType === 'phone' ? phone : undefined },
+        { passcode: passcode || undefined, expiresAt }
+      );
+
+      showToast(`Invitation sent to ${recipientId}`, 'success');
       setEmail('');
+      setPhone('');
+      setPasscode('');
     } catch (error: any) {
       showToast(error.message, 'error');
     } finally {
@@ -94,34 +123,91 @@ export const ShareFileModal = ({
                </button>
             </div>
 
-            <form onSubmit={handleShare} className="space-y-4 mb-10 relative z-10">
-               <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="relative flex-1 group">
-                    <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors" size={20} />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="Collaborator Email"
-                      className="w-full pl-14 pr-4 py-4 bg-surface-variant/30 border border-outline/10 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 focus:bg-surface transition-all text-on-surface font-medium text-sm"
-                    />
+            <form onSubmit={handleShare} className="space-y-6 mb-10 relative z-10">
+               <div className="flex bg-surface-variant/30 p-1 rounded-2xl w-fit mb-4">
+                  <button
+                    type="button"
+                    onClick={() => setShareType('email')}
+                    className={cn(
+                      "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                      shareType === 'email' ? "bg-primary text-on-primary shadow-md" : "text-on-surface-variant hover:bg-surface-variant/50"
+                    )}
+                  >
+                    Email
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShareType('phone')}
+                    className={cn(
+                      "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                      shareType === 'phone' ? "bg-primary text-on-primary shadow-md" : "text-on-surface-variant hover:bg-surface-variant/50"
+                    )}
+                  >
+                    Phone
+                  </button>
+               </div>
+
+               <div className="flex flex-col gap-4">
+                  <div className="relative group">
+                    {shareType === 'email' ? (
+                      <>
+                        <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors" size={20} />
+                        <input
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="Recipient's Email"
+                          className="w-full pl-14 pr-4 py-4 bg-surface-variant/30 border border-outline/10 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 focus:bg-surface transition-all text-on-surface font-medium text-sm"
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <Phone className="absolute left-5 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors" size={20} />
+                        <input
+                          type="tel"
+                          value={phone}
+                          onChange={(e) => setPhone(e.target.value)}
+                          placeholder="+1234567890"
+                          className="w-full pl-14 pr-4 py-4 bg-surface-variant/30 border border-outline/10 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 focus:bg-surface transition-all text-on-surface font-medium text-sm"
+                        />
+                      </>
+                    )}
                   </div>
-                  <div className="flex gap-3">
-                    <select
-                      value={role}
-                      onChange={(e) => setRole(e.target.value as any)}
-                      className="px-5 py-4 bg-surface-variant/50 border border-outline/10 rounded-2xl outline-none text-xs font-black uppercase tracking-widest text-primary focus:ring-2 focus:ring-primary/20 transition-all cursor-pointer"
-                    >
-                      <option value="viewer">Viewer</option>
-                      <option value="editor">Editor</option>
-                    </select>
-                    <button
-                      disabled={isLoading || !email}
-                      className="px-8 bg-primary text-on-primary font-black rounded-2xl hover:shadow-lg shadow-primary/20 transition-all disabled:opacity-50 active:scale-95 uppercase tracking-widest text-[10px]"
-                    >
-                      {isLoading ? <Loader2 className="animate-spin" size={20} /> : 'Invite'}
-                    </button>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="relative group">
+                       <ShieldLock className="absolute left-5 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors" size={20} />
+                       <input
+                         type="text"
+                         maxLength={5}
+                         value={passcode}
+                         onChange={(e) => setPasscode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                         placeholder="5-Char Passcode (Opt)"
+                         className="w-full pl-14 pr-4 py-4 bg-surface-variant/30 border border-outline/10 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 focus:bg-surface transition-all text-on-surface font-black tracking-[0.2em] text-sm placeholder:tracking-normal placeholder:font-medium"
+                       />
+                    </div>
+                    <div className="relative group">
+                       <Clock className="absolute left-5 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors" size={20} />
+                       <select
+                         value={expiryHours}
+                         onChange={(e) => setExpiryHours(e.target.value)}
+                         className="w-full pl-14 pr-4 py-4 bg-surface-variant/30 border border-outline/10 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 focus:bg-surface transition-all text-on-surface font-bold text-sm appearance-none cursor-pointer"
+                       >
+                         <option value="1">Expire in 1 Hour</option>
+                         <option value="24">Expire in 24 Hours</option>
+                         <option value="168">Expire in 7 Days</option>
+                         <option value="720">Expire in 30 Days</option>
+                       </select>
+                    </div>
                   </div>
+
+                  <button
+                    type="submit"
+                    disabled={isLoading || (shareType === 'email' ? !email : !phone)}
+                    className="w-full py-4 bg-primary text-on-primary font-black rounded-2xl hover:shadow-lg shadow-primary/20 transition-all disabled:opacity-50 active:scale-95 uppercase tracking-widest text-xs flex items-center justify-center gap-3"
+                  >
+                    {isLoading ? <Loader2 className="animate-spin" size={20} /> : <><UserPlus size={18} /> Send Invitation</>}
+                  </button>
                </div>
             </form>
 

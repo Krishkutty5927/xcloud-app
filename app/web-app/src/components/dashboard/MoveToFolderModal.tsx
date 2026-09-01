@@ -21,7 +21,7 @@ export const MoveToFolderModal = ({
   selectedFileIds: string[]
 }) => {
   const { user } = useAuth();
-  const { showToast } = useToast();
+  const { showToast, hideToast } = useToast();
   const [folders, setFolders] = useState<FileEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [targetFolderId, setTargetFolderId] = useState('root');

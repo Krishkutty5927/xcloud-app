@@ -3,50 +3,45 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
-    function isAuthenticated() {
+    // --- Helpers ---
+    function isSignedIn() {
       return request.auth != null;
     }
 
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+    function getEmail() {
+      return request.auth.token.get('email', '').lower();
     }
 
-    function isSharedWithMe() {
-      return isAuthenticated() &&
-             request.auth.token.email.lower() in resource.data.sharedWithEmails;
+    // --- Owner Level Access (CRITICAL) ---
+    // This allows the owner to read/write EVERYTHING under their own path.
+    match /users/{userId}/{document=**} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
     }
 
-    function isPublic() {
-      return resource.data.isPublic == true ||
-             resource.data.isPubliclyShared == true;
-    }
-
-    // Private User Data (Profile, Activities, Trash)
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
-
-      match /activities/{activityId} {
-        allow read, write: if isOwner(userId);
-      }
-
-      match /trash_files/{fileId} {
-        allow read, write: if isOwner(userId);
-      }
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
     }
 
-    // File Access (Direct path)
-    match /users/{userId}/user_files/{fileId} {
-      allow read: if isOwner(userId) || isSharedWithMe() || isPublic();
-      allow write: if isOwner(userId);
+    // --- Invitations (Shared Inbox) ---
+    match /invitations/{inviteId} {
+      allow create: if isSignedIn();
+      allow read, update, delete: if isSignedIn() && (
+        resource.data.get('senderId', '') == request.auth.uid ||
+        resource.data.get('recipientEmail', '').lower() == getEmail()
+      );
     }
 
-    // Allow collectionGroup queries for "Shared with me" and Public Access
+    // --- Global Shared File Access ---
+    // Allows reading files shared with you or public files from other users.
     match /{path=**}/user_files/{fileId} {
-      allow read: if isSharedWithMe() || isPublic();
+      allow read: if isSignedIn() && (
+        getEmail() in resource.data.get('sharedWithEmails', []) ||
+        resource.data.get('isPublic', false) == true ||
+        resource.data.get('isPubliclyShared', false) == true
+      );
     }
 
-    // Explicitly deny everything else
+    // --- Final Security Guard ---
     match /{document=**} {
       allow read, write: if false;
     }

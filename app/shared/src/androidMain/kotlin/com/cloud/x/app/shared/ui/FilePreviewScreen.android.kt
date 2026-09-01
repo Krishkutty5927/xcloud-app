@@ -28,6 +28,17 @@ import kotlinx.coroutines.withContext
 import android.webkit.WebView
 import android.webkit.WebViewClient
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import androidx.media3.common.PlaybackParameters
+import androidx.media3.ui.AspectRatioFrameLayout
+import kotlinx.coroutines.delay
+
 @Composable
 actual fun PreviewContent(file: FileEntry) {
     val context = LocalContext.current
@@ -41,26 +52,7 @@ actual fun PreviewContent(file: FileEntry) {
             )
         }
         file.fileType.contains("video", true) || file.fileType.contains("audio", true) -> {
-            val exoPlayer = remember {
-                ExoPlayer.Builder(context).build().apply {
-                    setMediaItem(MediaItem.fromUri(file.downloadUrl))
-                    prepare()
-                    playWhenReady = true
-                }
-            }
-            
-            DisposableEffect(Unit) {
-                onDispose { exoPlayer.release() }
-            }
-            
-            AndroidView(
-                factory = {
-                    PlayerView(context).apply {
-                        player = exoPlayer
-                    }
-                },
-                modifier = Modifier.fillMaxSize()
-            )
+            VideoPlayerPro(file)
         }
         file.fileType.contains("PDF", true) || file.fileType.contains("Document", true) -> {
             // PDF/Document Preview using WebView and Google Docs Viewer
@@ -126,5 +118,200 @@ actual fun PreviewContent(file: FileEntry) {
                 )
             }
         }
+    }
+}
+
+@Composable
+fun VideoPlayerPro(file: FileEntry) {
+    val context = LocalContext.current
+    val exoPlayer = remember {
+        ExoPlayer.Builder(context).build().apply {
+            setMediaItem(MediaItem.fromUri(file.downloadUrl))
+            prepare()
+            playWhenReady = true
+        }
+    }
+
+    var isPlaying by remember { mutableStateOf(true) }
+    var currentTime by remember { mutableStateOf(0L) }
+    var duration by remember { mutableStateOf(0L) }
+    var playbackSpeed by remember { mutableStateOf(1.0f) }
+    var showControls by remember { mutableStateOf(true) }
+    var resizeMode by remember { mutableStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
+
+    DisposableEffect(Unit) {
+        onDispose { exoPlayer.release() }
+    }
+
+    LaunchedEffect(exoPlayer) {
+        while (true) {
+            currentTime = exoPlayer.currentPosition
+            duration = exoPlayer.duration.coerceAtLeast(0L)
+            isPlaying = exoPlayer.isPlaying
+            delay(500)
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .clickable { showControls = !showControls },
+        contentAlignment = Alignment.Center
+    ) {
+        AndroidView(
+            factory = {
+                PlayerView(context).apply {
+                    player = exoPlayer
+                    useController = false
+                    this.resizeMode = resizeMode
+                }
+            },
+            update = {
+                it.resizeMode = resizeMode
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // Custom Controls
+        AnimatedVisibility(
+            visible = showControls,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f))
+            ) {
+                // Top Bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.TopCenter)
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        file.fileName,
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    
+                    Row {
+                        IconButton(onClick = {
+                            resizeMode = when (resizeMode) {
+                                AspectRatioFrameLayout.RESIZE_MODE_FIT -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+                                AspectRatioFrameLayout.RESIZE_MODE_FILL -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+                            }
+                        }) {
+                            Icon(Icons.Default.AspectRatio, null, tint = Color.White)
+                        }
+                    }
+                }
+
+                // Center Controls
+                Row(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalArrangement = Arrangement.spacedBy(48.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { exoPlayer.seekTo(exoPlayer.currentPosition - 10000) }) {
+                        Icon(Icons.Default.Replay10, null, tint = Color.White, modifier = Modifier.size(48.dp))
+                    }
+
+                    Surface(
+                        onClick = { if (isPlaying) exoPlayer.pause() else exoPlayer.play() },
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(72.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                null,
+                                modifier = Modifier.size(40.dp)
+                            )
+                        }
+                    }
+
+                    IconButton(onClick = { exoPlayer.seekTo(exoPlayer.currentPosition + 10000) }) {
+                        Icon(Icons.Default.Forward10, null, tint = Color.White, modifier = Modifier.size(48.dp))
+                    }
+                }
+
+                // Bottom Controls
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 24.dp)
+                ) {
+                    Slider(
+                        value = if (duration > 0) currentTime.toFloat() / duration else 0f,
+                        onValueChange = { exoPlayer.seekTo((it * duration).toLong()) },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        colors = SliderDefaults.colors(
+                            thumbColor = MaterialTheme.colorScheme.primary,
+                            activeTrackColor = MaterialTheme.colorScheme.primary
+                        )
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "${formatTime(currentTime)} / ${formatTime(duration)}",
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelMedium
+                        )
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(onClick = {
+                                playbackSpeed = when (playbackSpeed) {
+                                    1.0f -> 1.5f
+                                    1.5f -> 2.0f
+                                    2.0f -> 0.5f
+                                    else -> 1.0f
+                                }
+                                exoPlayer.playbackParameters = PlaybackParameters(playbackSpeed)
+                            }) {
+                                Text("${playbackSpeed}x", color = Color.White, fontWeight = FontWeight.Black)
+                            }
+                            
+                            IconButton(onClick = { /* Volume logic or toggle */ }) {
+                                Icon(Icons.Default.VolumeUp, null, tint = Color.White)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun formatTime(ms: Long): String {
+    val totalSeconds = ms / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return "%02d:%02d".format(minutes, seconds)
+}
+
+private fun getFileIcon(fileType: String): ImageVector {
+    return when {
+        fileType.contains("image", true) -> Icons.Default.Image
+        fileType.contains("video", true) -> Icons.Default.Videocam
+        fileType.contains("audio", true) -> Icons.Default.Audiotrack
+        fileType.contains("PDF", true) -> Icons.Default.PictureAsPdf
+        else -> Icons.Default.InsertDriveFile
     }
 }

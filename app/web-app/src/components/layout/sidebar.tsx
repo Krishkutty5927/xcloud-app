@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -18,6 +18,8 @@ import {
 import { cn, formatFileSize } from '@/lib/utils';
 import { useAuth } from '@/context/auth-context';
 import { motion } from 'framer-motion';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 const navItems = [
   { name: 'Home', href: '/dashboard', icon: Home },
@@ -32,7 +34,24 @@ const navItems = [
 export const Sidebar = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const pathname = usePathname();
-  const { userMetadata } = useAuth();
+  const { user, userMetadata } = useAuth();
+  const [inviteCount, setInviteCount] = useState(0);
+
+  useEffect(() => {
+    if (!user?.email) return;
+
+    const q = query(
+      collection(db, 'invitations'),
+      where('recipientEmail', '==', user.email.toLowerCase()),
+      where('status', '==', 'PENDING')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setInviteCount(snapshot.size);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   const used = userMetadata?.storageUsed || 0;
   const available = userMetadata?.storageAvailable || 5368709120;
@@ -108,6 +127,15 @@ export const Sidebar = () => {
                 fillOpacity={0.2}
               />
               {!isCollapsed && <span className="text-sm font-medium">{item.name}</span>}
+
+              {item.name === 'Shared' && inviteCount > 0 && (
+                <div className={cn(
+                  "absolute flex items-center justify-center bg-primary text-on-primary font-black rounded-full",
+                  isCollapsed ? "top-1 right-1 w-5 h-5 text-[8px]" : "right-4 w-6 h-6 text-[10px] shadow-lg shadow-primary/20"
+                )}>
+                  {inviteCount}
+                </div>
+              )}
 
               {isCollapsed && isActive && (
                  <motion.div

@@ -19,7 +19,8 @@ import {
   X,
   Clock,
   Globe,
-  Lock
+  Lock,
+  Info
 } from 'lucide-react';
 import { cn, formatFileSize } from '@/lib/utils';
 import { FileEntry } from '@/lib/upload-manager';
@@ -39,6 +40,7 @@ interface FileItemProps {
   onToggleSelection: (e: React.MouseEvent, id: string) => void;
   onClick: (e: React.MouseEvent) => void;
   onDoubleClick: () => void;
+  onInfoClick: (file: FileEntry) => void;
   onToggleStar: (file: FileEntry) => void;
   onDownload: (file: FileEntry) => void;
   onShare: (file: FileEntry) => void;
@@ -70,6 +72,7 @@ export const FileItem = memo(({
   onToggleSelection,
   onClick,
   onDoubleClick,
+  onInfoClick,
   onToggleStar,
   onDownload,
   onShare,
@@ -191,15 +194,15 @@ export const FileItem = memo(({
              {[
                { icon: Edit2, label: 'Rename', action: () => onCancelRename() /* Triggered from outside */ },
                { icon: Download, label: 'Download', action: () => onDownload(file) },
-               { icon: Share2, label: 'Share Link', action: () => onShare(file) }
+               { icon: Share2, label: 'Share Link', action: () => onShare(file) },
+               { icon: Info, label: 'Properties', action: () => onInfoClick(file) }
              ].map((item, i) => (
                <button
                  key={i}
                  onClick={(e) => {
                    e.stopPropagation();
                    if (item.label === 'Rename') {
-                     // Special handling for rename as it needs local state in parent
-                     onCancelRename(); // Placeholder for the actual rename trigger
+                     onCancelRename();
                    }
                    item.action();
                  }}
