@@ -33,6 +33,7 @@ class StorageViewModel(
             Firebase.auth.authStateChanged.flatMapLatest { user ->
                 if (user != null) {
                     userRepository.observeUserMetadata(user.uid)
+                        .catch { e -> println("[STORAGE] Metadata sync failed: ${e.message}") }
                 } else {
                     flowOf(null)
                 }

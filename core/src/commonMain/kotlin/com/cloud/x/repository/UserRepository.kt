@@ -87,4 +87,14 @@ class UserRepository {
             Result.failure(e)
         }
     }
+
+    suspend fun registerDevice(userId: String, device: UserDevice): Result<Unit> {
+        return try {
+            firestore.collection("users").document(userId)
+                .collection("devices").document(device.deviceId).set(device)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

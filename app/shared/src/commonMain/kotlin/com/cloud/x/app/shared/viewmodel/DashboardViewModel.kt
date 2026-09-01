@@ -16,6 +16,7 @@ import com.cloud.x.util.FileUploadManager
 import com.cloud.x.util.OfflineManager
 import com.cloud.x.util.StorageQuotaManager
 import com.cloud.x.util.currentTimeMillis
+import dev.gitlive.firebase.firestore.Timestamp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -163,36 +164,64 @@ class DashboardViewModel(
 
     private fun loadData() {
         val user = authRepository.getCurrentUser() ?: return
+        
+        // 1. Register this device node
         viewModelScope.launch {
-            userRepository.observeUserMetadata(user.uid).collectLatest {
-                _userMetadata.value = it ?: UserMetadata(uid = user.uid, email = user.email ?: "")
-            }
+            val deviceId = "android_${user.uid.take(5)}_${(100..999).random()}"
+            val device = UserDevice(
+                deviceId = deviceId,
+                name = "Android Smartphone",
+                type = "Android",
+                lastActive = Timestamp.now(),
+                ip = "192.168.1.x", // Placeholder for now
+                location = "Local Mesh",
+                isCurrent = true
+            )
+            userRepository.registerDevice(user.uid, device)
+        }
+
+        viewModelScope.launch {
+            userRepository.observeUserMetadata(user.uid)
+                .catch { e -> println("[DASHBOARD] Metadata sync failed: ${e.message}") }
+                .collectLatest {
+                    _userMetadata.value = it ?: UserMetadata(uid = user.uid, email = user.email ?: "")
+                }
         }
         viewModelScope.launch {
-            fileRepository.getFiles(user.uid).collectLatest {
-                _files.value = it.sortedByDescending { f -> f.uploadTimestamp.seconds }
-            }
+            fileRepository.getFiles(user.uid)
+                .catch { e -> println("[DASHBOARD] File sync failed: ${e.message}") }
+                .collectLatest {
+                    _files.value = it.sortedByDescending { f -> f.uploadTimestamp.seconds }
+                }
         }
         viewModelScope.launch {
-            trashRepository.getTrashFiles(user.uid).collectLatest {
-                _trashFiles.value = it.sortedByDescending { f -> f.deletedTimestamp?.seconds ?: 0L }
-            }
+            trashRepository.getTrashFiles(user.uid)
+                .catch { e -> println("[DASHBOARD] Trash sync failed: ${e.message}") }
+                .collectLatest {
+                    _trashFiles.value = it.sortedByDescending { f -> f.deletedTimestamp?.seconds ?: 0L }
+                }
         }
         viewModelScope.launch {
-            activityRepository.getRecentActivities(user.uid).collectLatest {
-                _activities.value = it
-            }
+            activityRepository.getRecentActivities(user.uid)
+                .catch { e -> println("[DASHBOARD] Activity sync failed: ${e.message}") }
+                .collectLatest {
+                    _activities.value = it
+                }
         }
         viewModelScope.launch {
-            fileRepository.getSentInvitations(user.uid).collectLatest {
-                _sentInvitations.value = it
-            }
+            fileRepository.getSentInvitations(user.uid)
+                .catch { e -> println("[DASHBOARD] Sent invite sync failed: ${e.message}") }
+                .collectLatest {
+                    _sentInvitations.value = it
+                }
         }
         user.email?.let { email ->
             viewModelScope.launch {
-                fileRepository.getReceivedInvitations(email).collectLatest {
-                    _receivedInvitations.value = it
-                }
+                fileRepository.getReceivedInvitations(email)
+                    .catch { e -> println("[DASHBOARD] Recv invite sync failed: ${e.message}") }
+                    .collectLatest {
+                        _receivedInvitations.value = it
+                    }
             }
         }
         viewModelScope.launch {
